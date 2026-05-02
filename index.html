@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Baker. — AI Declutter</title>
+<title>Baker.  -  AI Declutter</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -301,7 +301,7 @@ function processNext(items, idx, batchId) {
     var countEl = document.getElementById(batchId + '-count');
     if (dlBtn) dlBtn.style.display = 'block';
     if (countEl) countEl.textContent = batchDone + ' of ' + items.length + ' done';
-    showToast('Batch ' + batches.length + ' ready — ' + batchDone + ' image' + (batchDone>1?'s':'') + ' processed!');
+    showToast('Batch ' + batches.length + ' ready  -  ' + batchDone + ' image' + (batchDone>1?'s':'') + ' processed!');
     var doneCount = results.filter(function(r) { return r.status === 'done'; }).length;
     if (doneCount > 0) document.getElementById('dl-all').classList.add('show');
     return;
