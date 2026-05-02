@@ -133,17 +133,7 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
 <script>
 var _a = "sk-proj-JSHYMvVa1xWIdZgEUtIHwsFYdtFe3Poj", _b = "Cvq46BmsFi_rE51Vjk_QhU_kdogw9HY0ZHr6Sp5wmpT3BlbkFJfZT7UFY4J5JFGRFBN-J66_W9dzzzeoxnRfGUn1AMrZCI6Q3DT_IHvoM1I-ccnsZqJxk2JhXwkA", OPENAI_KEY = _a + _b;
 
-var UNIVERSAL_PROMPT = "Remove only loose portable items that do not belong to the property: rubbish, tools, bins, hoses, ladders, boxes, bags, pots, clutter, and any objects that could be carried away by hand.
-
-CRITICAL RULES - DO NOT VIOLATE:
-* DO NOT alter, improve, replace or regenerate ANY vegetation, plants, trees, grass, garden beds, soil or mulch - preserve exactly as photographed including dry, dead or overgrown areas
-* DO NOT change walls, floors, ceiling, tiles, roof, driveway, paths, fences or any built structure
-* DO NOT change or remove any fixed fixtures: vanity, sink, toilet, shower, bath, tapware, cabinetry, shelving, appliances, light fittings, mirrors, windows, doors
-* DO NOT change sky, lighting, shadows, colour or tone
-* DO NOT add, stage or improve anything - no new furniture, plants, styling or decoration
-* Camera angle, perspective and proportions must be 100% identical to the original
-
-ONLY remove items a person could physically pick up and carry away.";
+var UNIVERSAL_PROMPT = "Remove only loose portable items that do not belong to the property: rubbish, tools, bins, hoses, ladders, boxes, bags, pots, clutter, and any objects that could be carried away by hand.\n\nCRITICAL RULES - DO NOT VIOLATE:\n* DO NOT alter, improve, replace or regenerate ANY vegetation, plants, trees, grass, garden beds, soil or mulch - preserve exactly as photographed including dry, dead or overgrown areas\n* DO NOT change walls, floors, ceiling, tiles, roof, driveway, paths, fences or any built structure\n* DO NOT change or remove any fixed fixtures: vanity, sink, toilet, shower, bath, tapware, cabinetry, shelving, appliances, light fittings, mirrors, windows, doors\n* DO NOT change sky, lighting, shadows, colour or tone\n* DO NOT add, stage or improve anything - no new furniture, plants, styling or decoration\n* Camera angle, perspective and proportions must be 100% identical to the original\n\nONLY remove items a person could physically pick up and carry away.";
 
 
 document.getElementById('prompt').value = UNIVERSAL_PROMPT;
