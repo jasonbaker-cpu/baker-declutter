@@ -4,5 +4,418 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Baker. — AI Declutter</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100vh;}
+.header{padding:14px 24px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,0.07);background:#111;}
+.logo{font-size:17px;font-weight:700;letter-spacing:-.03em;}
+.logo em{color:#c94a0c;font-style:normal;}
+.status{display:flex;align-items:center;gap:6px;font-size:11px;font-family:"DM Mono",monospace;color:rgba(255,255,255,0.5);}
+.dot{width:7px;height:7px;border-radius:50%;background:#4caf50;}
+.tag{font-size:10px;font-family:"DM Mono",monospace;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:.1em;}
+.main{display:grid;grid-template-columns:320px 1fr;min-height:calc(100vh - 49px);}
+.left{border-right:1px solid rgba(255,255,255,0.07);padding:16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;}
+.drop{border:1.5px dashed rgba(255,255,255,0.12);border-radius:12px;padding:24px 16px;text-align:center;cursor:pointer;transition:all .2s;}
+.drop:hover,.drop.over{border-color:#c94a0c;background:rgba(201,74,12,0.05);}
+.drop-icon{font-size:28px;margin-bottom:8px;opacity:.4;}
+.drop-title{font-size:13px;font-weight:600;margin-bottom:3px;}
+.drop-sub{font-size:11px;color:rgba(255,255,255,0.35);}
+.browse-btn{display:inline-block;margin-top:10px;font-size:10px;font-family:"DM Mono",monospace;background:#c94a0c;color:#fff;padding:6px 14px;border-radius:5px;cursor:pointer;border:none;}
+#file-input{display:none;}
+.lbl{font-size:9px;font-family:"DM Mono",monospace;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;}
+.presets{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;}
+.preset{font-size:10px;font-family:"DM Mono",monospace;padding:4px 9px;border-radius:20px;border:1px solid rgba(255,255,255,0.1);background:none;color:rgba(255,255,255,0.4);cursor:pointer;transition:all .15s;}
+.preset.on{border-color:#c94a0c;color:#c94a0c;background:rgba(201,74,12,0.08);}
+.prompt-box{width:100%;background:#1a1a1a;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px 12px;font-family:"DM Mono",monospace;font-size:11px;color:#fff;resize:none;outline:none;line-height:1.5;}
+.prompt-box:focus{border-color:rgba(201,74,12,0.4);}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.stat{background:#1a1a1a;border-radius:8px;padding:10px;text-align:center;}
+.stat-n{font-size:22px;font-weight:700;font-family:"DM Mono",monospace;line-height:1;}
+.stat-l{font-size:9px;font-family:"DM Mono",monospace;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:.06em;margin-top:3px;}
+.prog-wrap{height:2px;background:#1a1a1a;border-radius:1px;overflow:hidden;}
+.prog-bar{height:100%;background:#c94a0c;width:0%;transition:width .3s;border-radius:1px;}
+.queue{display:flex;flex-direction:column;gap:5px;}
+.qi{background:#1a1a1a;border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:8px 10px;display:flex;gap:8px;align-items:center;}
+.qi-thumb{width:36px;height:28px;border-radius:3px;object-fit:cover;flex-shrink:0;}
+.qi-info{flex:1;min-width:0;}
+.qi-name{font-size:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.qi-size{font-size:9px;color:rgba(255,255,255,0.3);font-family:"DM Mono",monospace;}
+.badge{font-size:9px;font-family:"DM Mono",monospace;padding:2px 7px;border-radius:4px;flex-shrink:0;}
+.wait{background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.3);}
+.proc{background:rgba(201,74,12,0.15);color:#e8683a;animation:blink 1.2s ease-in-out infinite;}
+.done{background:rgba(42,122,58,0.12);color:#5dba6e;}
+.err{background:rgba(201,64,64,0.1);color:#e07070;}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:.4;}}
+.proc-btn{width:100%;padding:12px;background:#c94a0c;color:#fff;border:none;border-radius:10px;font-family:"Syne",sans-serif;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:background .2s;}
+.proc-btn:hover:not(:disabled){background:#e8683a;}
+.proc-btn:disabled{opacity:.35;cursor:not-allowed;}
+.spin{width:14px;height:14px;border:2px solid rgba(255,255,255,0.25);border-top-color:#fff;border-radius:50%;animation:spin .65s linear infinite;display:none;}
+.proc-btn.running .spin{display:block;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.right{display:flex;flex-direction:column;}
+.right-header{padding:14px 20px;border-bottom:1px solid rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:space-between;}
+.right-title{font-size:12px;font-weight:600;}
+.dl-all{font-size:10px;font-family:"DM Mono",monospace;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.6);padding:5px 12px;border-radius:5px;cursor:pointer;display:none;}
+.dl-all.show{display:block;}
+.results-wrap{flex:1;overflow-y:auto;padding:16px;}
+.results{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:300px;gap:10px;opacity:.25;}
+.rc{background:#111;border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;}
+.rc-imgs{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(255,255,255,0.04);}
+.rc-imgs img{width:100%;height:140px;object-fit:cover;display:block;}
+.rc-labels{display:grid;grid-template-columns:1fr 1fr;}
+.rc-label{font-size:9px;font-family:"DM Mono",monospace;color:rgba(255,255,255,0.3);padding:4px 8px;text-transform:uppercase;}
+.rc-body{padding:12px 14px;}
+.rc-name{font-size:12px;font-weight:600;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rc-footer{display:flex;gap:6px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.07);}
+.dl-btn{font-size:10px;font-family:"DM Mono",monospace;background:#c94a0c;color:#fff;border:none;border-radius:5px;padding:5px 12px;cursor:pointer;}
+.rc-proc{padding:20px;display:flex;flex-direction:column;align-items:center;gap:8px;}
+.proc-spin{width:24px;height:24px;border:2px solid rgba(255,255,255,0.1);border-top-color:#c94a0c;border-radius:50%;animation:spin .65s linear infinite;}
+.rc-msg{font-size:11px;color:rgba(255,255,255,0.5);}
+.rc-err-msg{font-size:11px;color:#e07070;font-family:"DM Mono",monospace;margin-top:4px;}
+.batch-section{margin-bottom:20px;}
+.batch-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#1a1a1a;border-radius:8px;margin-bottom:10px;border:1px solid rgba(255,255,255,0.08);}
+.batch-title{font-size:11px;font-family:"DM Mono",monospace;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.06em;}
+.batch-count{font-size:11px;font-family:"DM Mono",monospace;color:#5dba6e;}
+.batch-dl{font-size:10px;font-family:"DM Mono",monospace;background:#c94a0c;color:#fff;border:none;border-radius:5px;padding:5px 12px;cursor:pointer;}
+.toast{position:fixed;bottom:24px;right:24px;background:#1a1a1a;border:1px solid #5dba6e;color:#fff;padding:14px 18px;border-radius:10px;font-size:13px;font-family:"Syne",sans-serif;z-index:9999;display:flex;align-items:center;gap:10px;box-shadow:0 8px 32px rgba(0,0,0,0.4);transform:translateY(100px);opacity:0;transition:all .3s;}
+.toast.show{transform:translateY(0);opacity:1;}
+.toast-dot{width:8px;height:8px;border-radius:50%;background:#5dba6e;flex-shrink:0;}
+</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-</head><body><p>placeholder</p></body></html>
+</head>
+<body>
+<div class="header">
+  <div class="logo">Baker<em>.</em></div>
+  <div style="display:flex;align-items:center;gap:16px;">
+    <div class="tag">AI Declutter Tool</div>
+    <div class="status"><div class="dot"></div>Connected</div>
+  </div>
+</div>
+<div class="main">
+  <div class="left">
+    <div class="drop" id="drop" onclick="document.getElementById('file-input').click()">
+      <div class="drop-icon">&#8679;</div>
+      <div class="drop-title">Drop images here</div>
+      <div class="drop-sub">JPG, PNG, WEBP &mdash; multiple files</div>
+      <button class="browse-btn">Browse files</button>
+    </div>
+    <input type="file" id="file-input" multiple accept="image/*">
+    <div>
+      <textarea class="prompt-box" id="prompt" rows="8"></textarea>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="stat-n" id="sn-q">0</div><div class="stat-l">Queued</div></div>
+      <div class="stat"><div class="stat-n" id="sn-d" style="color:#5dba6e">0</div><div class="stat-l">Done</div></div>
+      <div class="stat"><div class="stat-n" id="sn-r" style="color:#c94a0c">0</div><div class="stat-l">Left</div></div>
+    </div>
+    <div class="prog-wrap"><div class="prog-bar" id="prog"></div></div>
+    <div class="lbl">Queue</div>
+    <div class="queue" id="queue"></div>
+    <button class="proc-btn" id="proc-btn" disabled onclick="startProcessing()">
+      <div class="spin"></div>
+      <span id="proc-txt">Add images to start</span>
+    </button>
+  </div>
+  <div class="right">
+    <div class="right-header">
+      <div class="right-title">Processed results</div>
+      <button class="dl-all" id="dl-all" onclick="downloadAll()">Download all</button>
+    </div>
+    <div class="results-wrap">
+      <div class="results" id="results">
+        <div class="empty"><div style="font-size:40px">&#128692;</div><div style="font-size:12px;color:rgba(255,255,255,.4)">Processed images appear here</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+var _a = "sk-proj-JSHYMvVa1xWIdZgEUtIHwsFYdtFe3Poj", _b = "Cvq46BmsFi_rE51Vjk_QhU_kdogw9HY0ZHr6Sp5wmpT3BlbkFJfZT7UFY4J5JFGRFBN-J66_W9dzzzeoxnRfGUn1AMrZCI6Q3DT_IHvoM1I-ccnsZqJxk2JhXwkA", OPENAI_KEY = _a + _b;
+
+var UNIVERSAL_PROMPT = "Remove only loose portable items that do not belong to the property: rubbish, tools, bins, hoses, ladders, boxes, bags, pots, clutter, and any objects that could be carried away by hand.
+
+CRITICAL RULES - DO NOT VIOLATE:
+* DO NOT alter, improve, replace or regenerate ANY vegetation, plants, trees, grass, garden beds, soil or mulch - preserve exactly as photographed including dry, dead or overgrown areas
+* DO NOT change walls, floors, ceiling, tiles, roof, driveway, paths, fences or any built structure
+* DO NOT change or remove any fixed fixtures: vanity, sink, toilet, shower, bath, tapware, cabinetry, shelving, appliances, light fittings, mirrors, windows, doors
+* DO NOT change sky, lighting, shadows, colour or tone
+* DO NOT add, stage or improve anything - no new furniture, plants, styling or decoration
+* Camera angle, perspective and proportions must be 100% identical to the original
+
+ONLY remove items a person could physically pick up and carry away.";
+
+
+document.getElementById('prompt').value = UNIVERSAL_PROMPT;
+
+// No presets - single universal prompt
+
+var queue = [];
+var results = [];
+var running = false;
+var batches = [];
+var currentBatchId = null;
+
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent = msg;
+  t.classList.add('show');
+  setTimeout(function() { t.classList.remove('show'); }, 4000);
+}
+
+function createBatch(items) {
+  var batchId = 'batch-' + Date.now();
+  var batch = { id: batchId, items: items, timestamp: new Date() };
+  batches.push(batch);
+  // Create batch section in results
+  var results_el = document.getElementById('results');
+  var empty = results_el.querySelector('.empty');
+  if (empty) empty.parentNode.removeChild(empty);
+  var section = document.createElement('div');
+  section.className = 'batch-section';
+  section.id = batchId;
+  var n = batches.length;
+  var time = batch.timestamp.toLocaleTimeString('en-AU', {hour:'2-digit',minute:'2-digit'});
+  section.innerHTML = '<div class="batch-header"><div><div class="batch-title">Batch ' + n + ' &mdash; ' + time + '</div><div class="batch-count" id="' + batchId + '-count">Processing ' + items.length + ' image' + (items.length>1?'s':'') + '...</div></div><button class="batch-dl" id="' + batchId + '-dlbtn" onclick="downloadBatch(\'' + batchId + '\')" style="display:none">Download batch</button></div><div class="results" id="' + batchId + '-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;"></div>';
+  results_el.appendChild(section);
+  return batchId;
+}
+
+function downloadBatch(batchId) {
+  var batch = batches.find(function(b) { return b.id === batchId; });
+  if (!batch) return;
+  var done = batch.items.filter(function(i) { return i.status === 'done' && i.resultUrl; });
+  if (!done.length) return;
+  if (typeof JSZip === 'undefined') {
+    // Fallback: download individually
+    done.forEach(function(item, idx) { setTimeout(function() { downloadResult(item.id); }, idx*300); });
+    return;
+  }
+  var zip = new JSZip();
+  var promises = done.map(function(item) {
+    var b64 = item.resultUrl.split(',')[1];
+    zip.file(item.name.replace(/\.[^.]+$/,'') + '_decluttered.png', b64, {base64:true});
+    return Promise.resolve();
+  });
+  Promise.all(promises).then(function() {
+    zip.generateAsync({type:'blob'}).then(function(content) {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(content);
+      a.download = 'batch-' + batches.indexOf(batch)+1 + '-decluttered.zip';
+      a.click();
+    });
+  });
+}
+
+var drop = document.getElementById('drop');
+drop.addEventListener('dragover', function(e) { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', function() { drop.classList.remove('over'); });
+drop.addEventListener('drop', function(e) {
+  e.preventDefault();
+  drop.classList.remove('over');
+  var files = Array.from(e.dataTransfer.files).filter(function(f) { return f.type.indexOf('image/') === 0; });
+  addFiles(files);
+});
+
+document.getElementById('file-input').addEventListener('change', function(e) {
+  addFiles(Array.from(e.target.files));
+  e.target.value = '';
+});
+
+function addFiles(files) {
+  files.forEach(function(f) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      queue.push({ id: Date.now() + Math.random(), file: f, name: f.name, size: f.size, dataUrl: e.target.result, status: 'wait', resultUrl: null });
+      renderQueue();
+      updateStats();
+      updateBtn();
+    };
+    reader.readAsDataURL(f);
+  });
+}
+
+function renderQueue() {
+  var el = document.getElementById('queue');
+  if (!queue.length) { el.innerHTML = ''; return; }
+  var html = '';
+  for (var i = 0; i < queue.length; i++) {
+    var item = queue[i];
+    var badgeClass = item.status === 'wait' ? 'wait' : item.status === 'proc' ? 'proc' : item.status === 'done' ? 'done' : 'err';
+    var badgeText = item.status === 'wait' ? 'waiting' : item.status === 'proc' ? 'processing...' : item.status === 'done' ? 'done' : 'error';
+    html += '<div class="qi"><img class="qi-thumb" src="' + item.dataUrl + '"><div class="qi-info"><div class="qi-name">' + item.name + '</div><div class="qi-size">' + Math.round(item.size/1024) + 'kb</div></div><span class="badge ' + badgeClass + '">' + badgeText + '</span></div>';
+  }
+  el.innerHTML = html;
+}
+
+function updateStats() {
+  var done = queue.filter(function(i) { return i.status === 'done'; }).length;
+  var left = queue.filter(function(i) { return i.status === 'wait' || i.status === 'proc'; }).length;
+  document.getElementById('sn-q').textContent = queue.length;
+  document.getElementById('sn-d').textContent = done;
+  document.getElementById('sn-r').textContent = left;
+  document.getElementById('prog').style.width = queue.length ? (done / queue.length * 100) + '%' : '0%';
+}
+
+function updateBtn() {
+  var btn = document.getElementById('proc-btn');
+  var txt = document.getElementById('proc-txt');
+  var waiting = queue.filter(function(i) { return i.status === 'wait'; }).length;
+  if (running) {
+    btn.disabled = false;
+    btn.classList.add('running');
+    txt.textContent = 'Processing... (' + waiting + ' left)';
+  } else if (waiting > 0) {
+    btn.disabled = false;
+    btn.classList.remove('running');
+    txt.textContent = 'Process ' + waiting + ' image' + (waiting !== 1 ? 's' : '');
+  } else if (!queue.length) {
+    btn.disabled = true;
+    btn.classList.remove('running');
+    txt.textContent = 'Add images to start';
+  } else {
+    btn.disabled = true;
+    btn.classList.remove('running');
+    txt.textContent = 'All done';
+  }
+}
+
+function startProcessing() {
+  if (running) return;
+  running = true;
+  updateBtn();
+  var items = queue.filter(function(i) { return i.status === 'wait'; });
+  var batchId = createBatch(items);
+  // Tag items with batch
+  items.forEach(function(i) { i.batchId = batchId; });
+  processNext(items, 0, batchId);
+}
+
+function processNext(items, idx, batchId) {
+  if (idx >= items.length) {
+    running = false;
+    updateBtn();
+    // Batch complete!
+    var batchDone = items.filter(function(i) { return i.status === 'done'; }).length;
+    var dlBtn = document.getElementById(batchId + '-dlbtn');
+    var countEl = document.getElementById(batchId + '-count');
+    if (dlBtn) dlBtn.style.display = 'block';
+    if (countEl) countEl.textContent = batchDone + ' of ' + items.length + ' done';
+    showToast('Batch ' + batches.length + ' ready — ' + batchDone + ' image' + (batchDone>1?'s':'') + ' processed!');
+    var doneCount = results.filter(function(r) { return r.status === 'done'; }).length;
+    if (doneCount > 0) document.getElementById('dl-all').classList.add('show');
+    return;
+  }
+  var item = items[idx];
+  item.status = 'proc';
+  renderQueue();
+  updateStats();
+  addProcessingCard(item);
+
+  processOne(item).then(function(url) {
+    item.status = 'done';
+    item.resultUrl = url;
+    updateResultCard(item);
+    renderQueue();
+    updateStats();
+    updateBtn();
+    processNext(items, idx + 1, batchId);
+  }).catch(function(err) {
+    item.status = 'err';
+    item.errorMsg = err.message;
+    updateResultCard(item);
+    renderQueue();
+    updateStats();
+    updateBtn();
+    processNext(items, idx + 1, batchId);
+  });
+}
+
+function processOne(item) {
+  return new Promise(function(resolve, reject) {
+    var img = new Image();
+    img.onload = function() {
+      var canvas = document.createElement('canvas');
+      canvas.width = 1920; canvas.height = 1280;
+      var ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#000'; ctx.fillRect(0,0,1536,1024);
+      var scale = Math.min(1920/img.width, 1280/img.height);
+      var w = img.width*scale; var h = img.height*scale;
+      ctx.drawImage(img,(1920-w)/2,(1280-h)/2,w,h);
+      var prompt = document.getElementById('prompt').value;
+      if (prompt.length > 999) prompt = prompt.slice(0,999);
+      canvas.toBlob(function(blob) {
+        var fd = new FormData();
+        fd.append('model','gpt-image-2');
+        fd.append('image[]',blob,'image.png');
+        fd.append('prompt',prompt);
+        fd.append('n','1');
+        fd.append('size','1920x1280');
+        fd.append('quality','high');
+        fetch('https://api.openai.com/v1/images/edits',{
+          method:'POST',
+          headers:{'Authorization':'Bearer '+OPENAI_KEY},
+          body:fd
+        }).then(function(r){return r.text();}).then(function(text){
+          if(!text||!text.trim()){reject(new Error('Empty response'));return;}
+          var data; try{data=JSON.parse(text);}catch(e){reject(new Error('Bad JSON'));return;}
+          if(data.error){reject(new Error(data.error.message));return;}
+          var b64=data.data&&data.data[0]&&data.data[0].b64_json;
+          if(!b64){reject(new Error('No image returned'));return;}
+          resolve('data:image/png;base64,'+b64);
+        }).catch(function(err){reject(err);});
+      },'image/png');
+    };
+    img.onerror=function(){reject(new Error('Failed to load image'));};
+    img.src=item.dataUrl;
+  });
+}
+
+function addProcessingCard(item) {
+  var gridId = item.batchId ? item.batchId + '-grid' : 'results';
+  var el = document.getElementById(gridId) || document.getElementById('results');
+  var card = document.createElement('div');
+  card.className = 'rc';
+  card.id = 'rc-' + item.id;
+  var img = document.createElement('img');
+  img.src = item.dataUrl;
+  img.style.cssText = 'width:100%;height:160px;object-fit:cover;display:block;filter:brightness(0.5)';
+  var proc = document.createElement('div');
+  proc.className = 'rc-proc';
+  proc.innerHTML = '<div class="proc-spin"></div><div class="rc-msg">Processing with gpt-image-2... 1-2 mins</div>';
+  card.appendChild(img);
+  card.appendChild(proc);
+  el.appendChild(card);
+  results.push(item);
+}
+
+function updateResultCard(item) {
+  var card = document.getElementById('rc-' + item.id);
+  if (!card) return;
+  if (item.status === 'done' && item.resultUrl) {
+    card.innerHTML = '<div class="rc-imgs"><img src="' + item.dataUrl + '"><img src="' + item.resultUrl + '"></div><div class="rc-labels"><div class="rc-label">Before</div><div class="rc-label">After</div></div><div class="rc-body"><div class="rc-name">' + item.name + '</div><div class="rc-footer"><button class="dl-btn" onclick="downloadResult(' + "'" + item.id + "'" + ')">Download result</button></div></div>';
+  } else {
+    card.innerHTML = '<img src="' + item.dataUrl + '" style="width:100%;height:160px;object-fit:cover;display:block;filter:brightness(0.4)"><div class="rc-body"><div class="rc-name">' + item.name + '</div><div class="rc-err-msg">' + (item.errorMsg || 'Error') + '</div></div>';
+  }
+}
+
+function downloadResult(id) {
+  var item = null;
+  for (var i = 0; i < queue.length; i++) { if (String(queue[i].id) === String(id)) { item = queue[i]; break; } }
+  if (!item || !item.resultUrl) return;
+  var a = document.createElement('a');
+  a.href = item.resultUrl;
+  a.download = item.name.replace(/\.[^.]+$/, '') + '_decluttered.png';
+  a.click();
+}
+
+function downloadAll() {
+  var done = queue.filter(function(i) { return i.status === 'done'; });
+  done.forEach(function(item, idx) {
+    setTimeout(function() { downloadResult(item.id); }, idx * 300);
+  });
+}
+</script>
+<div class="toast" id="toast"><div class="toast-dot"></div><span id="toast-msg">Batch ready!</span></div>
+</body>
+</html>
