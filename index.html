@@ -86,6 +86,39 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
+<div id="pw-screen">
+  <div class="pw-logo">Baker<em>.</em></div>
+  <div class="pw-label">Enter password to continue</div>
+  <input type="password" id="pw-input" placeholder="••••••••" maxlength="20" autocomplete="off">
+  <div id="pw-error">Incorrect password</div>
+  <button id="pw-btn" onclick="checkPw()">Unlock</button>
+</div>
+<script>
+  // Check if already authenticated this session
+  if (sessionStorage.getItem('bp_auth') === '1') {
+    document.getElementById('pw-screen') && document.getElementById('pw-screen').remove();
+  }
+  document.getElementById('pw-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') checkPw();
+  });
+  function checkPw() {
+    var pw = document.getElementById('pw-input').value;
+    var h = 0;
+    for (var i = 0; i < pw.length; i++) { h = ((h << 5) - h) + pw.charCodeAt(i); h |= 0; }
+    if (h === -1009854675) { // hash of "baker2024"
+      sessionStorage.setItem('bp_auth', '1');
+      document.getElementById('pw-screen').style.opacity = '0';
+      document.getElementById('pw-screen').style.transition = 'opacity .3s';
+      setTimeout(function(){ document.getElementById('pw-screen').remove(); }, 300);
+    } else {
+      document.getElementById('pw-error').style.display = 'block';
+      var inp = document.getElementById('pw-input');
+      inp.classList.add('shake');
+      inp.value = '';
+      setTimeout(function(){ inp.classList.remove('shake'); }, 300);
+    }
+  }
+</script>
 <div class="header">
   <div class="logo">Baker<em>.</em></div>
   <div style="display:flex;align-items:center;gap:16px;">
