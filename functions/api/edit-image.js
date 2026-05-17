@@ -1,3 +1,5 @@
+import { sendTelegramIfComplete } from '../_lib/notify.js';
+
 export async function onRequestPost({ request, env }) {
   const form = await request.formData();
   const image = form.get('image');
@@ -9,13 +11,14 @@ export async function onRequestPost({ request, env }) {
     return json({ error: 'missing fields (image, prompt, batchId, name required)' }, 400);
   }
 
+  const origin = new URL(request.url).origin;
+
   const safeBase = String(name).replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
   const originalFilename = `${safeBase}.png`;
   const originalKey = `batches/${batchId}/originals/${originalFilename}`;
   const filename = `${safeBase}_decluttered.png`;
   const resultKey = `batches/${batchId}/${filename}`;
 
-  // Read input bytes once; reuse for both R2 and OpenAI
   const imageBytes = await image.arrayBuffer();
 
   await env.R2_BUCKET.put(originalKey, imageBytes, {
@@ -39,6 +42,7 @@ export async function onRequestPost({ request, env }) {
     });
   } catch (e) {
     await updateItem(env, batchId, name, { status: 'err', error: 'OpenAI fetch failed: ' + e.message, originalKey, originalFilename });
+    await sendTelegramIfComplete(env, batchId, origin);
     return json({ error: 'OpenAI fetch failed', detail: e.message }, 502);
   }
 
@@ -48,17 +52,20 @@ export async function onRequestPost({ request, env }) {
     data = JSON.parse(text);
   } catch {
     await updateItem(env, batchId, name, { status: 'err', error: 'Invalid OpenAI response', originalKey, originalFilename });
+    await sendTelegramIfComplete(env, batchId, origin);
     return json({ error: 'Invalid OpenAI response', detail: text.slice(0, 500) }, 502);
   }
 
   if (data.error) {
     await updateItem(env, batchId, name, { status: 'err', error: data.error.message, originalKey, originalFilename });
+    await sendTelegramIfComplete(env, batchId, origin);
     return json({ error: data.error.message }, 502);
   }
 
   const b64 = data?.data?.[0]?.b64_json;
   if (!b64) {
     await updateItem(env, batchId, name, { status: 'err', error: 'No image in response', originalKey, originalFilename });
+    await sendTelegramIfComplete(env, batchId, origin);
     return json({ error: 'No image returned' }, 502);
   }
 
@@ -76,6 +83,8 @@ export async function onRequestPost({ request, env }) {
     filename,
     error: null,
   });
+
+  await sendTelegramIfComplete(env, batchId, origin);
 
   return json({
     ok: true,
