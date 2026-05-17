@@ -9,9 +9,22 @@ export async function onRequestPost({ request, env }) {
     return json({ error: 'missing fields (image, prompt, batchId, name required)' }, 400);
   }
 
+  const safeBase = String(name).replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const originalFilename = `${safeBase}.png`;
+  const originalKey = `batches/${batchId}/originals/${originalFilename}`;
+  const filename = `${safeBase}_decluttered.png`;
+  const resultKey = `batches/${batchId}/${filename}`;
+
+  // Read input bytes once; reuse for both R2 and OpenAI
+  const imageBytes = await image.arrayBuffer();
+
+  await env.R2_BUCKET.put(originalKey, imageBytes, {
+    httpMetadata: { contentType: 'image/png' },
+  });
+
   const openaiForm = new FormData();
   openaiForm.append('model', 'gpt-image-2');
-  openaiForm.append('image[]', image, 'image.png');
+  openaiForm.append('image[]', new Blob([imageBytes], { type: 'image/png' }), 'image.png');
   openaiForm.append('prompt', String(prompt).slice(0, 999));
   openaiForm.append('n', '1');
   openaiForm.append('size', '1920x1280');
@@ -25,7 +38,7 @@ export async function onRequestPost({ request, env }) {
       body: openaiForm,
     });
   } catch (e) {
-    await updateItem(env, batchId, name, { status: 'err', error: 'OpenAI fetch failed: ' + e.message });
+    await updateItem(env, batchId, name, { status: 'err', error: 'OpenAI fetch failed: ' + e.message, originalKey, originalFilename });
     return json({ error: 'OpenAI fetch failed', detail: e.message }, 502);
   }
 
@@ -34,33 +47,41 @@ export async function onRequestPost({ request, env }) {
   try {
     data = JSON.parse(text);
   } catch {
-    await updateItem(env, batchId, name, { status: 'err', error: 'Invalid OpenAI response' });
+    await updateItem(env, batchId, name, { status: 'err', error: 'Invalid OpenAI response', originalKey, originalFilename });
     return json({ error: 'Invalid OpenAI response', detail: text.slice(0, 500) }, 502);
   }
 
   if (data.error) {
-    await updateItem(env, batchId, name, { status: 'err', error: data.error.message });
+    await updateItem(env, batchId, name, { status: 'err', error: data.error.message, originalKey, originalFilename });
     return json({ error: data.error.message }, 502);
   }
 
   const b64 = data?.data?.[0]?.b64_json;
   if (!b64) {
-    await updateItem(env, batchId, name, { status: 'err', error: 'No image in response' });
+    await updateItem(env, batchId, name, { status: 'err', error: 'No image in response', originalKey, originalFilename });
     return json({ error: 'No image returned' }, 502);
   }
 
-  const safeBase = String(name).replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
-  const filename = `${safeBase}_decluttered.png`;
-  const key = `batches/${batchId}/${filename}`;
-  const bytes = base64ToBytes(b64);
+  const resultBytes = base64ToBytes(b64);
 
-  await env.R2_BUCKET.put(key, bytes, {
+  await env.R2_BUCKET.put(resultKey, resultBytes, {
     httpMetadata: { contentType: 'image/png' },
   });
 
-  await updateItem(env, batchId, name, { status: 'done', resultKey: key, filename });
+  await updateItem(env, batchId, name, {
+    status: 'done',
+    originalKey,
+    originalFilename,
+    resultKey,
+    filename,
+    error: null,
+  });
 
-  return json({ ok: true, url: `/img/${batchId}/${filename}` });
+  return json({
+    ok: true,
+    url: `/img/${batchId}/${filename}`,
+    originalUrl: `/img/${batchId}/originals/${originalFilename}`,
+  });
 }
 
 async function updateItem(env, batchId, name, updates) {

@@ -16,21 +16,26 @@ export async function onRequestGet({ params, env, request }) {
   });
 
   const images = done.map((item) => ({
-    url: `/img/${id}/${item.filename}`,
+    before: item.originalFilename ? `/img/${id}/originals/${item.originalFilename}` : null,
+    after: `/img/${id}/${item.filename}`,
     name: item.name,
     filename: item.filename,
   }));
 
   const cards = images
     .map((img, i) => `
-      <div class="card">
-        <div class="card-img" onclick="openLb(${i})">
-          <img src="${escapeAttr(img.url)}" loading="lazy" alt="${escapeAttr(img.name)}">
-          <div class="card-overlay">Click to view</div>
+      <div class="card" onclick="openLb(${i})">
+        <div class="card-imgs">
+          ${img.before
+            ? `<img src="${escapeAttr(img.before)}" loading="lazy" alt="Before"><img src="${escapeAttr(img.after)}" loading="lazy" alt="After">`
+            : `<img src="${escapeAttr(img.after)}" loading="lazy" alt="${escapeAttr(img.name)}" style="grid-column:1/-1">`}
         </div>
+        ${img.before
+          ? '<div class="card-labels"><div class="card-label">Before</div><div class="card-label">After</div></div>'
+          : ''}
         <div class="card-body">
           <div class="card-name">${escapeHtml(img.name)}</div>
-          <a class="dl-btn" href="${escapeAttr(img.url)}" download="${escapeAttr(img.filename)}" onclick="event.stopPropagation()">Download</a>
+          <a class="dl-btn" href="${escapeAttr(img.after)}" download="${escapeAttr(img.filename)}" onclick="event.stopPropagation()">Download</a>
         </div>
       </div>
     `)
@@ -67,12 +72,13 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
 .batch-sub{font-size:12px;font-family:"DM Mono",monospace;color:rgba(255,255,255,0.4);margin-top:4px;}
 .dl-all-btn{font-size:12px;font-family:"DM Mono",monospace;background:#c94a0c;color:#fff;border:none;border-radius:6px;padding:10px 18px;cursor:pointer;}
 .dl-all-btn:disabled{opacity:.5;cursor:wait;}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;}
-.card{background:#111;border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;}
-.card-img{position:relative;cursor:zoom-in;background:#000;}
-.card-img img{width:100%;height:220px;object-fit:cover;display:block;}
-.card-overlay{position:absolute;inset:0;background:rgba(0,0,0,0.5);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-family:"DM Mono",monospace;letter-spacing:.06em;text-transform:uppercase;opacity:0;transition:opacity .2s;}
-.card-img:hover .card-overlay{opacity:1;}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px;}
+.card{background:#111;border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;cursor:zoom-in;transition:border-color .15s;}
+.card:hover{border-color:rgba(201,74,12,0.4);}
+.card-imgs{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(255,255,255,0.04);}
+.card-imgs img{width:100%;height:160px;object-fit:cover;display:block;background:#000;}
+.card-labels{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid rgba(255,255,255,0.04);}
+.card-label{font-size:9px;font-family:"DM Mono",monospace;color:rgba(255,255,255,0.3);padding:4px 10px;text-transform:uppercase;letter-spacing:.06em;}
 .card-body{padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;}
 .card-name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;}
 .dl-btn{font-size:10px;font-family:"DM Mono",monospace;background:rgba(255,255,255,0.06);color:#fff;border:1px solid rgba(255,255,255,0.1);border-radius:5px;padding:6px 12px;cursor:pointer;text-decoration:none;}
@@ -84,25 +90,30 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
 .waiting{margin-bottom:16px;padding:10px 14px;background:rgba(255,255,255,0.04);border-radius:8px;font-size:12px;color:rgba(255,255,255,0.6);}
 .waiting a{color:#c94a0c;}
 
-/* Lightbox */
-.lb{position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:1000;display:none;align-items:center;justify-content:center;}
+/* Lightbox — before/after side by side */
+.lb{position:fixed;inset:0;background:rgba(0,0,0,0.96);z-index:1000;display:none;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px 24px;}
 .lb.open{display:flex;}
-.lb-img{max-width:95vw;max-height:88vh;object-fit:contain;user-select:none;-webkit-user-drag:none;}
-.lb-btn{position:absolute;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:50%;width:48px;height:48px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;font-family:"DM Mono",monospace;transition:all .15s;backdrop-filter:blur(4px);}
+.lb-imgs{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:1600px;width:100%;flex:1;min-height:0;}
+.lb-imgs.single{grid-template-columns:1fr;}
+.lb-side{display:flex;flex-direction:column;align-items:center;min-height:0;}
+.lb-side img{max-width:100%;flex:1;min-height:0;object-fit:contain;background:#000;border-radius:4px;user-select:none;-webkit-user-drag:none;}
+.lb-label{font-size:10px;font-family:"DM Mono",monospace;color:rgba(255,255,255,0.45);margin-top:8px;text-transform:uppercase;letter-spacing:.1em;}
+.lb-bar{margin-top:18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:center;}
+.lb-counter{color:#c94a0c;font-weight:600;font-family:"DM Mono",monospace;font-size:12px;}
+.lb-name{font-size:12px;font-family:"DM Mono",monospace;color:rgba(255,255,255,0.7);max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.lb-dl{font-size:11px;font-family:"DM Mono",monospace;color:#fff;text-decoration:underline;cursor:pointer;background:none;border:none;}
+.lb-dl:hover{color:#c94a0c;}
+.lb-btn{position:absolute;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;font-family:"DM Mono",monospace;transition:all .15s;backdrop-filter:blur(4px);}
 .lb-btn:hover{background:#c94a0c;border-color:#c94a0c;}
-.lb-close{top:20px;right:20px;}
-.lb-prev{left:20px;top:50%;transform:translateY(-50%);}
-.lb-next{right:20px;top:50%;transform:translateY(-50%);}
-.lb-info{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.6);padding:8px 16px;border-radius:6px;font-size:11px;font-family:"DM Mono",monospace;color:rgba(255,255,255,0.8);backdrop-filter:blur(4px);display:flex;align-items:center;gap:12px;max-width:90vw;}
-.lb-counter{color:#c94a0c;font-weight:600;}
-.lb-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px;}
-.lb-dl{color:#fff;text-decoration:underline;cursor:pointer;background:none;border:none;font-family:inherit;font-size:inherit;padding:0;}
-@media (max-width:600px){
-  .lb-btn{width:40px;height:40px;font-size:16px;}
-  .lb-prev{left:8px;}
-  .lb-next{right:8px;}
-  .lb-close{top:12px;right:12px;}
-  .lb-name{max-width:140px;}
+.lb-close{top:16px;right:16px;}
+.lb-prev{left:16px;top:50%;transform:translateY(-50%);}
+.lb-next{right:16px;top:50%;transform:translateY(-50%);}
+@media (max-width:700px){
+  .lb-imgs{grid-template-columns:1fr;}
+  .lb{padding:48px 12px 16px;}
+  .lb-btn{width:38px;height:38px;font-size:16px;}
+  .lb-prev{left:6px;}
+  .lb-next{right:6px;}
 }
 </style>
 </head>
@@ -128,11 +139,20 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
   <button class="lb-btn lb-close" onclick="lbClose()" aria-label="Close">&times;</button>
   <button class="lb-btn lb-prev" onclick="lbPrev()" aria-label="Previous">&#8249;</button>
   <button class="lb-btn lb-next" onclick="lbNext()" aria-label="Next">&#8250;</button>
-  <img class="lb-img" id="lb-img" alt="">
-  <div class="lb-info">
+  <div class="lb-imgs" id="lb-imgs">
+    <div class="lb-side" id="lb-before-side">
+      <img id="lb-before" alt="Before">
+      <div class="lb-label">Before (original)</div>
+    </div>
+    <div class="lb-side">
+      <img id="lb-after" alt="After">
+      <div class="lb-label">After (AI processed)</div>
+    </div>
+  </div>
+  <div class="lb-bar">
     <span class="lb-counter" id="lb-counter">1 / 1</span>
     <span class="lb-name" id="lb-name"></span>
-    <button class="lb-dl" id="lb-dl" onclick="lbDownload()">Download</button>
+    <button class="lb-dl" id="lb-dl" onclick="lbDownload()">Download after</button>
   </div>
 </div>
 
@@ -162,20 +182,30 @@ function lbNext() {
 }
 function updateLb() {
   var img = IMGS[lbIdx];
-  document.getElementById('lb-img').src = img.url;
-  document.getElementById('lb-img').alt = img.name;
+  var imgsEl = document.getElementById('lb-imgs');
+  var beforeSide = document.getElementById('lb-before-side');
+  if (img.before) {
+    imgsEl.classList.remove('single');
+    beforeSide.style.display = '';
+    document.getElementById('lb-before').src = img.before;
+  } else {
+    imgsEl.classList.add('single');
+    beforeSide.style.display = 'none';
+  }
+  document.getElementById('lb-after').src = img.after;
   document.getElementById('lb-counter').textContent = (lbIdx + 1) + ' / ' + IMGS.length;
   document.getElementById('lb-name').textContent = img.name;
-  // Preload neighbours
   if (IMGS.length > 1) {
-    new Image().src = IMGS[(lbIdx + 1) % IMGS.length].url;
-    new Image().src = IMGS[(lbIdx - 1 + IMGS.length) % IMGS.length].url;
+    var next = IMGS[(lbIdx + 1) % IMGS.length];
+    var prev = IMGS[(lbIdx - 1 + IMGS.length) % IMGS.length];
+    new Image().src = next.after; if (next.before) new Image().src = next.before;
+    new Image().src = prev.after; if (prev.before) new Image().src = prev.before;
   }
 }
 function lbDownload() {
   var img = IMGS[lbIdx];
   var a = document.createElement('a');
-  a.href = img.url;
+  a.href = img.after;
   a.download = img.filename;
   a.click();
 }
@@ -187,16 +217,13 @@ document.addEventListener('keydown', function(e) {
   else if (e.key === 'ArrowRight') lbNext();
 });
 
-// Swipe support for mobile
 var touchStartX = 0;
 document.getElementById('lb').addEventListener('touchstart', function(e) {
   touchStartX = e.changedTouches[0].screenX;
 });
 document.getElementById('lb').addEventListener('touchend', function(e) {
   var diff = e.changedTouches[0].screenX - touchStartX;
-  if (Math.abs(diff) > 50) {
-    if (diff < 0) lbNext(); else lbPrev();
-  }
+  if (Math.abs(diff) > 50) { if (diff < 0) lbNext(); else lbPrev(); }
 });
 
 ${done.length ? `
@@ -205,7 +232,7 @@ function downloadAll() {
   var btn = document.getElementById('dl-all');
   btn.textContent = 'Zipping...'; btn.disabled = true;
   Promise.all(IMGS.map(function(img) {
-    return fetch(img.url).then(function(r) { return r.blob(); }).then(function(b) {
+    return fetch(img.after).then(function(r) { return r.blob(); }).then(function(b) {
       zip.file(img.filename, b);
     });
   })).then(function() {
