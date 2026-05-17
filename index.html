@@ -105,6 +105,15 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
 .item-lb-dl{font-size:11px;font-family:"DM Mono",monospace;color:rgba(255,255,255,0.6);text-decoration:underline;background:none;border:none;cursor:pointer;}
 .item-lb-dl:hover{color:#fff;}
 @media (max-width:700px){.item-lb-imgs{grid-template-columns:1fr;}.item-lb{padding:48px 12px 16px;}}
+.recent-section{margin-top:4px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.07);}
+.recent-list{display:flex;flex-direction:column;gap:5px;max-height:280px;overflow-y:auto;}
+.rb-item{display:flex;align-items:center;gap:8px;padding:6px 8px;background:#1a1a1a;border:1px solid rgba(255,255,255,0.05);border-radius:8px;text-decoration:none;color:#fff;transition:all .15s;}
+.rb-item:hover{border-color:#c94a0c;background:rgba(201,74,12,0.06);}
+.rb-thumb{width:40px;height:30px;border-radius:3px;object-fit:cover;flex-shrink:0;background:#000;}
+.rb-info{flex:1;min-width:0;}
+.rb-id{font-size:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:"DM Mono",monospace;}
+.rb-meta{font-size:9px;color:rgba(255,255,255,0.4);font-family:"DM Mono",monospace;margin-top:2px;}
+.recent-empty{font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:12px 0;font-family:"DM Mono",monospace;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
@@ -141,6 +150,12 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
       <div class="spin"></div>
       <span id="proc-txt">Add images to start</span>
     </button>
+    <div class="recent-section">
+      <div class="lbl">Recent batches</div>
+      <div class="recent-list" id="recent-list">
+        <div class="recent-empty">Loading...</div>
+      </div>
+    </div>
   </div>
   <div class="right">
     <div class="right-header">
@@ -349,6 +364,8 @@ async function startProcessing() {
 
   var galleryUrl = window.location.origin + '/batch/' + batchId;
   showToast('Batch ' + batches.length + ' ready &mdash; ' + doneCount + ' image' + (doneCount !== 1 ? 's' : '') + ' &mdash; <a href="' + galleryUrl + '" target="_blank">open gallery</a>');
+
+  loadRecentBatches();
 }
 
 async function processOneItem(item, batchId) {
@@ -516,6 +533,49 @@ document.addEventListener('keydown', function(e) {
     closeItemLb();
   }
 });
+
+async function loadRecentBatches() {
+  try {
+    var res = await fetch('/api/batches');
+    var data = await res.json();
+    renderRecentBatches(data.batches || []);
+  } catch (e) {
+    document.getElementById('recent-list').innerHTML = '<div class="recent-empty">Failed to load</div>';
+  }
+}
+
+function renderRecentBatches(items) {
+  var el = document.getElementById('recent-list');
+  if (!items.length) {
+    el.innerHTML = '<div class="recent-empty">No batches yet</div>';
+    return;
+  }
+  el.innerHTML = items.slice(0, 20).map(function(b) {
+    var when = b.createdAt ? formatRelTime(b.createdAt) : '';
+    var thumb = b.thumbnail
+      ? '<img class="rb-thumb" src="' + b.thumbnail + '" alt="" loading="lazy">'
+      : '<div class="rb-thumb"></div>';
+    return '<a class="rb-item" href="/batch/' + b.id + '" target="_blank">' +
+      thumb +
+      '<div class="rb-info">' +
+        '<div class="rb-id">' + b.id + '</div>' +
+        '<div class="rb-meta">' + when + ' &middot; ' + b.done + '/' + b.total + '</div>' +
+      '</div>' +
+    '</a>';
+  }).join('');
+}
+
+function formatRelTime(iso) {
+  var d = new Date(iso);
+  var diff = (Date.now() - d.getTime()) / 1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  if (diff < 86400 * 7) return Math.floor(diff / 86400) + 'd ago';
+  return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+}
+
+loadRecentBatches();
 </script>
 <div class="toast" id="toast"><div class="toast-dot"></div><span id="toast-msg">Batch ready!</span></div>
 
