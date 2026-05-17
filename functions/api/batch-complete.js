@@ -22,37 +22,30 @@ export async function onRequestPost({ request, env }) {
   const origin = new URL(request.url).origin;
   const galleryUrl = `${origin}/batch/${batchId}`;
 
-  const firstThumb = done[0]
-    ? `${origin}/img/${batchId}/${done[0].filename}`
-    : null;
+  const lines = [
+    `*Batch ready* — ${done.length} of ${total} processed`,
+  ];
+  if (errs.length) lines.push(`${errs.length} failed`);
+  lines.push('', `[Open gallery](${galleryUrl})`);
+  const text = lines.join('\n');
 
-  const embed = {
-    title: `Batch ready — ${done.length} of ${total} processed`,
-    url: galleryUrl,
-    color: 0xc94a0c,
-    timestamp: new Date().toISOString(),
-    fields: [
-      { name: 'Completed', value: String(done.length), inline: true },
-      { name: 'Failed', value: String(errs.length), inline: true },
-    ],
-  };
-  if (errs.length === 0) embed.fields.pop();
-  if (firstThumb) embed.image = { url: firstThumb };
+  const tgRes = await fetch(
+    `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: env.TELEGRAM_CHAT_ID,
+        text,
+        parse_mode: 'Markdown',
+        disable_web_page_preview: true,
+      }),
+    }
+  );
 
-  const payload = {
-    content: `New batch ready: <${galleryUrl}>`,
-    embeds: [embed],
-  };
-
-  const discordRes = await fetch(env.DISCORD_WEBHOOK_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-
-  if (!discordRes.ok) {
-    const detail = await discordRes.text();
-    return json({ error: 'Discord webhook failed', status: discordRes.status, detail }, 502);
+  if (!tgRes.ok) {
+    const detail = await tgRes.text();
+    return json({ error: 'Telegram send failed', status: tgRes.status, detail }, 502);
   }
 
   manifest.notified = true;
