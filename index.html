@@ -24,9 +24,6 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
 .browse-btn{display:inline-block;margin-top:10px;font-size:10px;font-family:"DM Mono",monospace;background:#c94a0c;color:#fff;padding:6px 14px;border-radius:5px;cursor:pointer;border:none;}
 #file-input{display:none;}
 .lbl{font-size:9px;font-family:"DM Mono",monospace;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;}
-.presets{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;}
-.preset{font-size:10px;font-family:"DM Mono",monospace;padding:4px 9px;border-radius:20px;border:1px solid rgba(255,255,255,0.1);background:none;color:rgba(255,255,255,0.4);cursor:pointer;transition:all .15s;}
-.preset.on{border-color:#c94a0c;color:#c94a0c;background:rgba(201,74,12,0.08);}
 .prompt-box{width:100%;background:#1a1a1a;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px 12px;font-family:"DM Mono",monospace;font-size:11px;color:#fff;resize:none;outline:none;line-height:1.5;}
 .prompt-box:focus{border-color:rgba(201,74,12,0.4);}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
@@ -69,7 +66,7 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
 .rc-body{padding:12px 14px;}
 .rc-name{font-size:12px;font-weight:600;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .rc-footer{display:flex;gap:6px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.07);}
-.dl-btn{font-size:10px;font-family:"DM Mono",monospace;background:#c94a0c;color:#fff;border:none;border-radius:5px;padding:5px 12px;cursor:pointer;}
+.dl-btn{font-size:10px;font-family:"DM Mono",monospace;background:#c94a0c;color:#fff;border:none;border-radius:5px;padding:5px 12px;cursor:pointer;text-decoration:none;display:inline-block;}
 .rc-proc{padding:20px;display:flex;flex-direction:column;align-items:center;gap:8px;}
 .proc-spin{width:24px;height:24px;border:2px solid rgba(255,255,255,0.1);border-top-color:#c94a0c;border-radius:50%;animation:spin .65s linear infinite;}
 .rc-msg{font-size:11px;color:rgba(255,255,255,0.5);}
@@ -78,10 +75,15 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
 .batch-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#1a1a1a;border-radius:8px;margin-bottom:10px;border:1px solid rgba(255,255,255,0.08);}
 .batch-title{font-size:11px;font-family:"DM Mono",monospace;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.06em;}
 .batch-count{font-size:11px;font-family:"DM Mono",monospace;color:#5dba6e;}
-.batch-dl{font-size:10px;font-family:"DM Mono",monospace;background:#c94a0c;color:#fff;border:none;border-radius:5px;padding:5px 12px;cursor:pointer;}
-.toast{position:fixed;bottom:24px;right:24px;background:#1a1a1a;border:1px solid #5dba6e;color:#fff;padding:14px 18px;border-radius:10px;font-size:13px;font-family:"Syne",sans-serif;z-index:9999;display:flex;align-items:center;gap:10px;box-shadow:0 8px 32px rgba(0,0,0,0.4);transform:translateY(100px);opacity:0;transition:all .3s;}
+.batch-actions{display:flex;gap:6px;}
+.batch-link{font-size:10px;font-family:"DM Mono",monospace;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:5px;padding:5px 12px;cursor:pointer;text-decoration:none;display:none;}
+.batch-link.show{display:inline-block;}
+.batch-dl{font-size:10px;font-family:"DM Mono",monospace;background:#c94a0c;color:#fff;border:none;border-radius:5px;padding:5px 12px;cursor:pointer;display:none;}
+.batch-dl.show{display:inline-block;}
+.toast{position:fixed;bottom:24px;right:24px;background:#1a1a1a;border:1px solid #5dba6e;color:#fff;padding:14px 18px;border-radius:10px;font-size:13px;font-family:"Syne",sans-serif;z-index:9999;display:flex;align-items:center;gap:10px;box-shadow:0 8px 32px rgba(0,0,0,0.4);transform:translateY(100px);opacity:0;transition:all .3s;max-width:360px;}
 .toast.show{transform:translateY(0);opacity:1;}
 .toast-dot{width:8px;height:8px;border-radius:50%;background:#5dba6e;flex-shrink:0;}
+.toast a{color:#5dba6e;text-decoration:underline;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
@@ -122,7 +124,6 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
   <div class="right">
     <div class="right-header">
       <div class="right-title">Processed results</div>
-      <button class="dl-all" id="dl-all" onclick="downloadAll()">Download all</button>
     </div>
     <div class="results-wrap">
       <div class="results" id="results">
@@ -132,33 +133,22 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
   </div>
 </div>
 <script>
-var _a = "sk-proj-WGp3GfXCH3_D5ryn4oY8QXFJe6jhS_nh", _b = "H_Qv4tfLNH8nXjCt7cwJ9mez9DWVLrjwVy3sPFQLCST3BlbkFJyNtD-Tt_OeEG76c8pEfGzT30FZy-TnowOqRT8jDyBh8LfpsGfG9bINeg6AA6_0ku1oTOI97c4A", OPENAI_KEY = _a + _b;
-
 var UNIVERSAL_PROMPT = "Remove only loose portable items that do not belong to the property: rubbish, tools, bins, hoses, ladders, boxes, bags, pots, clutter, and any objects that could be carried away by hand.\n\nCRITICAL RULES - DO NOT VIOLATE:\n* DO NOT alter, improve, replace or regenerate ANY vegetation, plants, trees, grass, garden beds, soil or mulch - preserve exactly as photographed including dry, dead or overgrown areas\n* DO NOT change walls, floors, ceiling, tiles, roof, driveway, paths, fences or any built structure\n* DO NOT change or remove any fixed fixtures: vanity, sink, toilet, shower, bath, tapware, cabinetry, shelving, appliances, light fittings, mirrors, windows, doors\n* DO NOT change sky, lighting, shadows, colour or tone\n* DO NOT add, stage or improve anything - no new furniture, plants, styling or decoration\n* Camera angle, perspective and proportions must be 100% identical to the original\n\nONLY remove items a person could physically pick up and carry away.";
-
 
 document.getElementById('prompt').value = UNIVERSAL_PROMPT;
 
-// No presets - single universal prompt
-
 var queue = [];
-var results = [];
 var running = false;
 var batches = [];
-var currentBatchId = null;
 
-function showToast(msg) {
+function showToast(msgHtml, persist) {
   var t = document.getElementById('toast');
-  document.getElementById('toast-msg').textContent = msg;
+  document.getElementById('toast-msg').innerHTML = msgHtml;
   t.classList.add('show');
-  setTimeout(function() { t.classList.remove('show'); }, 4000);
+  if (!persist) setTimeout(function() { t.classList.remove('show'); }, 6000);
 }
 
-function createBatch(items) {
-  var batchId = 'batch-' + Date.now();
-  var batch = { id: batchId, items: items, timestamp: new Date() };
-  batches.push(batch);
-  // Create batch section in results
+function createBatchSection(batchId, items) {
   var results_el = document.getElementById('results');
   var empty = results_el.querySelector('.empty');
   if (empty) empty.parentNode.removeChild(empty);
@@ -166,10 +156,20 @@ function createBatch(items) {
   section.className = 'batch-section';
   section.id = batchId;
   var n = batches.length;
-  var time = batch.timestamp.toLocaleTimeString('en-AU', {hour:'2-digit',minute:'2-digit'});
-  section.innerHTML = '<div class="batch-header"><div><div class="batch-title">Batch ' + n + ' &mdash; ' + time + '</div><div class="batch-count" id="' + batchId + '-count">Processing ' + items.length + ' image' + (items.length>1?'s':'') + '...</div></div><button class="batch-dl" id="' + batchId + '-dlbtn" onclick="downloadBatch(\'' + batchId + '\')" style="display:none">Download batch</button></div><div class="results" id="' + batchId + '-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;"></div>';
+  var time = new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+  section.innerHTML =
+    '<div class="batch-header">' +
+      '<div>' +
+        '<div class="batch-title">Batch ' + n + ' &mdash; ' + time + '</div>' +
+        '<div class="batch-count" id="' + batchId + '-count">Processing ' + items.length + ' image' + (items.length > 1 ? 's' : '') + '...</div>' +
+      '</div>' +
+      '<div class="batch-actions">' +
+        '<a class="batch-link" id="' + batchId + '-link" href="/batch/' + batchId + '" target="_blank">Open gallery</a>' +
+        '<button class="batch-dl" id="' + batchId + '-dlbtn" onclick="downloadBatch(\'' + batchId + '\')">Download batch</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="results" id="' + batchId + '-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;"></div>';
   results_el.appendChild(section);
-  return batchId;
 }
 
 function downloadBatch(batchId) {
@@ -178,23 +178,21 @@ function downloadBatch(batchId) {
   var done = batch.items.filter(function(i) { return i.status === 'done' && i.resultUrl; });
   if (!done.length) return;
   if (typeof JSZip === 'undefined') {
-    // Fallback: download individually
-    done.forEach(function(item, idx) { setTimeout(function() { downloadResult(item.id); }, idx*300); });
+    done.forEach(function(item, idx) { setTimeout(function() { downloadResult(item.id); }, idx * 300); });
     return;
   }
   var zip = new JSZip();
-  var promises = done.map(function(item) {
-    var b64 = item.resultUrl.split(',')[1];
-    zip.file(item.name.replace(/\.[^.]+$/,'') + '_decluttered.png', b64, {base64:true});
-    return Promise.resolve();
-  });
-  Promise.all(promises).then(function() {
-    zip.generateAsync({type:'blob'}).then(function(content) {
-      var a = document.createElement('a');
-      a.href = URL.createObjectURL(content);
-      a.download = 'batch-' + batches.indexOf(batch)+1 + '-decluttered.zip';
-      a.click();
+  Promise.all(done.map(function(item) {
+    return fetch(item.resultUrl).then(function(r) { return r.blob(); }).then(function(b) {
+      zip.file(item.name.replace(/\.[^.]+$/, '') + '_decluttered.png', b);
     });
+  })).then(function() {
+    return zip.generateAsync({ type: 'blob' });
+  }).then(function(content) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(content);
+    a.download = batchId + '.zip';
+    a.click();
   });
 }
 
@@ -217,10 +215,13 @@ function addFiles(files) {
   files.forEach(function(f) {
     var reader = new FileReader();
     reader.onload = function(e) {
-      queue.push({ id: Date.now() + Math.random(), file: f, name: f.name, size: f.size, dataUrl: e.target.result, status: 'wait', resultUrl: null });
-      renderQueue();
-      updateStats();
-      updateBtn();
+      queue.push({
+        id: Date.now() + Math.random(),
+        file: f, name: f.name, size: f.size,
+        dataUrl: e.target.result,
+        status: 'wait', resultUrl: null
+      });
+      renderQueue(); updateStats(); updateBtn();
     };
     reader.readAsDataURL(f);
   });
@@ -234,7 +235,7 @@ function renderQueue() {
     var item = queue[i];
     var badgeClass = item.status === 'wait' ? 'wait' : item.status === 'proc' ? 'proc' : item.status === 'done' ? 'done' : 'err';
     var badgeText = item.status === 'wait' ? 'waiting' : item.status === 'proc' ? 'processing...' : item.status === 'done' ? 'done' : 'error';
-    html += '<div class="qi"><img class="qi-thumb" src="' + item.dataUrl + '"><div class="qi-info"><div class="qi-name">' + item.name + '</div><div class="qi-size">' + Math.round(item.size/1024) + 'kb</div></div><span class="badge ' + badgeClass + '">' + badgeText + '</span></div>';
+    html += '<div class="qi"><img class="qi-thumb" src="' + item.dataUrl + '"><div class="qi-info"><div class="qi-name">' + item.name + '</div><div class="qi-size">' + Math.round(item.size / 1024) + 'kb</div></div><span class="badge ' + badgeClass + '">' + badgeText + '</span></div>';
   }
   el.innerHTML = html;
 }
@@ -271,94 +272,108 @@ function updateBtn() {
   }
 }
 
-function startProcessing() {
+async function startProcessing() {
   if (running) return;
+  var items = queue.filter(function(i) { return i.status === 'wait'; });
+  if (!items.length) return;
+
   running = true;
   updateBtn();
-  var items = queue.filter(function(i) { return i.status === 'wait'; });
-  var batchId = createBatch(items);
-  // Tag items with batch
-  items.forEach(function(i) { i.batchId = batchId; });
-  processNext(items, 0, batchId);
-}
 
-function processNext(items, idx, batchId) {
-  if (idx >= items.length) {
-    running = false;
-    updateBtn();
-    // Batch complete!
-    var batchDone = items.filter(function(i) { return i.status === 'done'; }).length;
-    var dlBtn = document.getElementById(batchId + '-dlbtn');
-    var countEl = document.getElementById(batchId + '-count');
-    if (dlBtn) dlBtn.style.display = 'block';
-    if (countEl) countEl.textContent = batchDone + ' of ' + items.length + ' done';
-    showToast('Batch ' + batches.length + ' ready  -  ' + batchDone + ' image' + (batchDone>1?'s':'') + ' processed!');
-    var doneCount = results.filter(function(r) { return r.status === 'done'; }).length;
-    if (doneCount > 0) document.getElementById('dl-all').classList.add('show');
+  var batchId;
+  try {
+    var res = await fetch('/api/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: items.map(function(i) { return { name: i.name }; }) })
+    });
+    var data = await res.json();
+    if (!res.ok || !data.id) throw new Error(data.error || 'batch create failed');
+    batchId = data.id;
+  } catch (e) {
+    running = false; updateBtn();
+    showToast('Failed to create batch: ' + e.message);
     return;
   }
-  var item = items[idx];
-  item.status = 'proc';
-  renderQueue();
-  updateStats();
-  addProcessingCard(item);
 
-  processOne(item).then(function(url) {
-    item.status = 'done';
-    item.resultUrl = url;
-    updateResultCard(item);
-    renderQueue();
-    updateStats();
-    updateBtn();
-    processNext(items, idx + 1, batchId);
-  }).catch(function(err) {
-    item.status = 'err';
-    item.errorMsg = err.message;
-    updateResultCard(item);
-    renderQueue();
-    updateStats();
-    updateBtn();
-    processNext(items, idx + 1, batchId);
-  });
+  var batch = { id: batchId, items: items, timestamp: new Date() };
+  batches.push(batch);
+  items.forEach(function(i) { i.batchId = batchId; });
+  createBatchSection(batchId, items);
+
+  for (var i = 0; i < items.length; i++) {
+    await processOneItem(items[i], batchId);
+  }
+
+  running = false;
+  updateBtn();
+
+  var doneCount = items.filter(function(i) { return i.status === 'done'; }).length;
+  var dlBtn = document.getElementById(batchId + '-dlbtn');
+  var linkBtn = document.getElementById(batchId + '-link');
+  var countEl = document.getElementById(batchId + '-count');
+  if (dlBtn && doneCount) dlBtn.classList.add('show');
+  if (linkBtn) linkBtn.classList.add('show');
+  if (countEl) countEl.textContent = doneCount + ' of ' + items.length + ' done';
+
+  try {
+    await fetch('/api/batch-complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batchId: batchId })
+    });
+  } catch (e) {
+    // Notification failure is non-fatal — gallery still works
+  }
+
+  var galleryUrl = window.location.origin + '/batch/' + batchId;
+  showToast('Batch ' + batches.length + ' ready &mdash; ' + doneCount + ' image' + (doneCount !== 1 ? 's' : '') + ' &mdash; <a href="' + galleryUrl + '" target="_blank">open gallery</a>');
 }
 
-function processOne(item) {
+async function processOneItem(item, batchId) {
+  item.status = 'proc';
+  renderQueue(); updateStats(); addProcessingCard(item);
+
+  try {
+    var blob = await resizeToCanvas(item.dataUrl);
+    var form = new FormData();
+    form.append('image', blob, 'image.png');
+    form.append('prompt', document.getElementById('prompt').value);
+    form.append('batchId', batchId);
+    form.append('name', item.name);
+
+    var res = await fetch('/api/edit-image', { method: 'POST', body: form });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    if (!data.url) throw new Error('No URL returned');
+
+    item.status = 'done';
+    item.resultUrl = data.url;
+    updateResultCard(item);
+  } catch (e) {
+    item.status = 'err';
+    item.errorMsg = e.message;
+    updateResultCard(item);
+  }
+
+  renderQueue(); updateStats(); updateBtn();
+}
+
+function resizeToCanvas(dataUrl) {
   return new Promise(function(resolve, reject) {
     var img = new Image();
     img.onload = function() {
       var canvas = document.createElement('canvas');
       canvas.width = 1920; canvas.height = 1280;
       var ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#000'; ctx.fillRect(0,0,1536,1024);
-      var scale = Math.min(1920/img.width, 1280/img.height);
-      var w = img.width*scale; var h = img.height*scale;
-      ctx.drawImage(img,(1920-w)/2,(1280-h)/2,w,h);
-      var prompt = document.getElementById('prompt').value;
-      if (prompt.length > 999) prompt = prompt.slice(0,999);
-      canvas.toBlob(function(blob) {
-        var fd = new FormData();
-        fd.append('model','gpt-image-2');
-        fd.append('image[]',blob,'image.png');
-        fd.append('prompt',prompt);
-        fd.append('n','1');
-        fd.append('size','1920x1280');
-        fd.append('quality','high');
-        fetch('https://api.openai.com/v1/images/edits',{
-          method:'POST',
-          headers:{'Authorization':'Bearer '+OPENAI_KEY},
-          body:fd
-        }).then(function(r){return r.text();}).then(function(text){
-          if(!text||!text.trim()){reject(new Error('Empty response'));return;}
-          var data; try{data=JSON.parse(text);}catch(e){reject(new Error('Bad JSON'));return;}
-          if(data.error){reject(new Error(data.error.message));return;}
-          var b64=data.data&&data.data[0]&&data.data[0].b64_json;
-          if(!b64){reject(new Error('No image returned'));return;}
-          resolve('data:image/png;base64,'+b64);
-        }).catch(function(err){reject(err);});
-      },'image/png');
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 1920, 1280);
+      var scale = Math.min(1920 / img.width, 1280 / img.height);
+      var w = img.width * scale, h = img.height * scale;
+      ctx.drawImage(img, (1920 - w) / 2, (1280 - h) / 2, w, h);
+      canvas.toBlob(function(b) { b ? resolve(b) : reject(new Error('toBlob failed')); }, 'image/png');
     };
-    img.onerror=function(){reject(new Error('Failed to load image'));};
-    img.src=item.dataUrl;
+    img.onerror = function() { reject(new Error('Failed to load image')); };
+    img.src = dataUrl;
   });
 }
 
@@ -377,16 +392,22 @@ function addProcessingCard(item) {
   card.appendChild(img);
   card.appendChild(proc);
   el.appendChild(card);
-  results.push(item);
 }
 
 function updateResultCard(item) {
   var card = document.getElementById('rc-' + item.id);
   if (!card) return;
   if (item.status === 'done' && item.resultUrl) {
-    card.innerHTML = '<div class="rc-imgs"><img src="' + item.dataUrl + '"><img src="' + item.resultUrl + '"></div><div class="rc-labels"><div class="rc-label">Before</div><div class="rc-label">After</div></div><div class="rc-body"><div class="rc-name">' + item.name + '</div><div class="rc-footer"><button class="dl-btn" onclick="downloadResult(' + "'" + item.id + "'" + ')">Download result</button></div></div>';
+    card.innerHTML =
+      '<div class="rc-imgs"><img src="' + item.dataUrl + '"><img src="' + item.resultUrl + '"></div>' +
+      '<div class="rc-labels"><div class="rc-label">Before</div><div class="rc-label">After</div></div>' +
+      '<div class="rc-body"><div class="rc-name">' + item.name + '</div>' +
+      '<div class="rc-footer"><a class="dl-btn" href="' + item.resultUrl + '" download="' + item.name.replace(/\.[^.]+$/, '') + '_decluttered.png">Download result</a></div></div>';
   } else {
-    card.innerHTML = '<img src="' + item.dataUrl + '" style="width:100%;height:160px;object-fit:cover;display:block;filter:brightness(0.4)"><div class="rc-body"><div class="rc-name">' + item.name + '</div><div class="rc-err-msg">' + (item.errorMsg || 'Error') + '</div></div>';
+    card.innerHTML =
+      '<img src="' + item.dataUrl + '" style="width:100%;height:160px;object-fit:cover;display:block;filter:brightness(0.4)">' +
+      '<div class="rc-body"><div class="rc-name">' + item.name + '</div>' +
+      '<div class="rc-err-msg">' + (item.errorMsg || 'Error') + '</div></div>';
   }
 }
 
@@ -399,14 +420,7 @@ function downloadResult(id) {
   a.download = item.name.replace(/\.[^.]+$/, '') + '_decluttered.png';
   a.click();
 }
-
-function downloadAll() {
-  var done = queue.filter(function(i) { return i.status === 'done'; });
-  done.forEach(function(item, idx) {
-    setTimeout(function() { downloadResult(item.id); }, idx * 300);
-  });
-}
 </script>
 <div class="toast" id="toast"><div class="toast-dot"></div><span id="toast-msg">Batch ready!</span></div>
 </body>
-</html><!-- fixed Sat May  2 06:57:13 UTC 2026 -->
+</html>
