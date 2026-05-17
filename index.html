@@ -136,6 +136,10 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
     </div>
     <input type="file" id="file-input" multiple accept="image/*">
     <div>
+      <div class="presets">
+        <button class="preset" type="button" data-preset="bit" onclick="applyPreset('bit')">Declutter a bit</button>
+        <button class="preset" type="button" data-preset="all" onclick="applyPreset('all')">Entire room</button>
+      </div>
       <textarea class="prompt-box" id="prompt" rows="8"></textarea>
     </div>
     <div class="stats">
@@ -169,9 +173,78 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
   </div>
 </div>
 <script>
-var UNIVERSAL_PROMPT = "Remove only loose portable items that do not belong to the property: rubbish, tools, bins, hoses, ladders, boxes, bags, pots, clutter, and any objects that could be carried away by hand.\n\nCRITICAL RULES - DO NOT VIOLATE:\n* DO NOT alter, improve, replace or regenerate ANY vegetation, plants, trees, grass, garden beds, soil or mulch - preserve exactly as photographed including dry, dead or overgrown areas\n* DO NOT change walls, floors, ceiling, tiles, roof, driveway, paths, fences or any built structure\n* DO NOT change or remove any fixed fixtures: vanity, sink, toilet, shower, bath, tapware, cabinetry, shelving, appliances, light fittings, mirrors, windows, doors\n* DO NOT change sky, lighting, shadows, colour or tone\n* DO NOT add, stage or improve anything - no new furniture, plants, styling or decoration\n* Camera angle, perspective and proportions must be 100% identical to the original\n\nONLY remove items a person could physically pick up and carry away.";
+var PRESETS = {
+  bit: `Perform professional real estate decluttering only.
+STRICT RULES (DO NOT VIOLATE)
+Do NOT change, move, resize, repaint, or modify any walls, ceilings, floors, windows, doors, skirting boards, cornices, mirrors, tiles, cabinetry, benchtops, fixed shelving, wardrobes, shower screens, vanities, appliances, light fittings, blinds, curtains, or any built-in or fixed furniture
+Do NOT alter camera angle, perspective, lens distortion, field of view, or room proportions
+Do NOT add furniture, decor, plants, art, rugs, lighting, or styling elements
+Do NOT replace or redesign any materials, colours, textures, or finishes
+Do NOT "improve", modernise, stage, or beautify the space
+Do NOT repair, conceal, smooth over, or remove any wall cracks, damage, stains, marks, or imperfections. All existing wall conditions must remain visible exactly as they appear in the original photo.
+Do NOT clean, brighten, recolour, or in any way modify the appearance of carpet, timber floors, tiles, or any floor surface.
+ONLY ALLOWED ACTIONS
+Remove loose clutter and personal items only, such as: small appliances, cords, cables, bins, baskets, laundry items, toiletries, bottles, cleaning products, towels, mats, decorations, toys, boxes, papers, loose objects, countertop items, and minor floor clutter
+Remove freestanding temporary storage items such as: freestanding shelving units, trolleys, racks, and temporary storage furniture that is not a bed, sofa, or dining table
+If an item is removable by hand in real life, it may be removed
+If an item is fixed, built-in, structural, or attached, it MUST remain unchanged
+PRESERVE THESE ITEMS (DO NOT REMOVE)
+Do NOT remove posters, artwork, or wall hangings — leave all wall decorations exactly as they are
+Do NOT remove bed linen, doonas, pillows, or mattress covers — if bedding is present, tidy it in place, do not strip the bed
+Do NOT remove cushions or pillows from sofas or chairs
+CAMERA & PERSPECTIVE (CRITICAL)
+The camera position, angle, and viewpoint must be 100% identical to the original photo
+Do NOT flip, mirror, rotate, or reposition the camera in any way
+Do NOT alter the field of view, zoom level, or lens distortion
+The output must be shot from the exact same corner and direction as the input image
+The horizon line and vanishing point must match the original exactly
+Room proportions must be identical — do not widen, narrow, or stretch the space
+PRESERVE REALISM
+Maintain original lighting, shadows, reflections, and natural imperfections
+Keep surfaces realistic — no over-polishing, smoothing, or artificial shine
+Do NOT change the white balance, colour temperature, or overall tone of the image
+The colour temperature must match the original photo exactly
+Result must look like the same room, photographed at the same moment, just tidier
+Do NOT alter, clean, recolour, or improve the appearance of carpets, flooring, or floor coverings. All carpet stains, wear marks, discolouration, and imperfections must remain exactly as they appear in the original photo.
+OUTPUT GOAL
+A clean, neutral, accurate real estate-ready image with identical architecture and layout, showing the true space with clutter removed only. Do not change any walls, perspective, or room geometry. The output must overlay perfectly onto the original image.`,
+  all: `Remove all freestanding, portable, and loose items from this room. This includes all furniture (chairs, tables, beds, sofas, wardrobes, shelving units, desks, drawers, TV units, side tables, ottomans, racks, trolleys), as well as all loose objects (appliances, cords, cables, bins, baskets, laundry, toiletries, bottles, cleaning products, towels, bath mats, decorations, toys, boxes, papers, rugs, and any other portable floor or surface items).
+REMOVE if it can be physically carried or moved by hand in real life.
+DO NOT REMOVE OR ALTER any of the following — they must remain 100% unchanged: Windows, blinds, curtains, doors, walls, ceilings, floors, skirting boards, cornices, light fittings, power outlets, light switches, tiles, built-in cabinetry, benchtops, fixed shelving, wardrobes, shower screens, vanities, fixed appliances, mirrors, or any structural or built-in element.
+DO NOT alter any of the following — they must remain 100% identical to the original: Camera angle, perspective, field of view, zoom, lens distortion, room proportions, horizon line, vanishing points, lighting, shadows, colour temperature, white balance, or overall image tone.
+DO NOT repair, conceal, clean, or improve any surface. All wall marks, cracks, stains, carpet wear, floor imperfections, and damage must remain exactly as visible in the original photo.
+DO NOT add anything — no furniture, staging, decor, plants, art, or enhancements of any kind.
+OUTPUT: The identical room, same moment, same light, same angle — with all portable and freestanding items removed, leaving only the fixed architecture and built-ins. The result must overlay perfectly onto the original image.`,
+};
 
-document.getElementById('prompt').value = UNIVERSAL_PROMPT;
+var PROMPT_STORAGE_KEY = 'declutter_prompt_v2';
+
+function applyPreset(key) {
+  if (!PRESETS[key]) return;
+  document.getElementById('prompt').value = PRESETS[key];
+  localStorage.setItem(PROMPT_STORAGE_KEY, PRESETS[key]);
+  updatePresetButtons();
+}
+
+function updatePresetButtons() {
+  var current = document.getElementById('prompt').value;
+  var buttons = document.querySelectorAll('.preset');
+  for (var i = 0; i < buttons.length; i++) {
+    var key = buttons[i].getAttribute('data-preset');
+    if (PRESETS[key] === current) buttons[i].classList.add('on');
+    else buttons[i].classList.remove('on');
+  }
+}
+
+(function initPrompt() {
+  var saved = localStorage.getItem(PROMPT_STORAGE_KEY);
+  document.getElementById('prompt').value = saved || PRESETS.bit;
+  updatePresetButtons();
+  document.getElementById('prompt').addEventListener('input', function() {
+    localStorage.setItem(PROMPT_STORAGE_KEY, this.value);
+    updatePresetButtons();
+  });
+})();
 
 var queue = [];
 var running = false;

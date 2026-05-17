@@ -28,7 +28,7 @@ export async function onRequestPost({ request, env }) {
   const openaiForm = new FormData();
   openaiForm.append('model', 'gpt-image-2');
   openaiForm.append('image[]', new Blob([imageBytes], { type: 'image/png' }), 'image.png');
-  openaiForm.append('prompt', String(prompt).slice(0, 999));
+  openaiForm.append('prompt', String(prompt).slice(0, 32000));
   openaiForm.append('n', '1');
   openaiForm.append('size', '1920x1280');
   openaiForm.append('quality', 'high');
