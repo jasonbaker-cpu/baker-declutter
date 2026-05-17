@@ -84,6 +84,27 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
 .toast.show{transform:translateY(0);opacity:1;}
 .toast-dot{width:8px;height:8px;border-radius:50%;background:#5dba6e;flex-shrink:0;}
 .toast a{color:#5dba6e;text-decoration:underline;}
+.rc-imgs.clickable{cursor:zoom-in;position:relative;}
+.rc-imgs.clickable::after{content:"Click to compare";position:absolute;inset:0;background:rgba(0,0,0,0.55);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-family:"DM Mono",monospace;letter-spacing:.08em;text-transform:uppercase;opacity:0;transition:opacity .15s;pointer-events:none;}
+.rc-imgs.clickable:hover::after{opacity:1;}
+.item-lb{position:fixed;inset:0;background:rgba(0,0,0,0.96);z-index:2000;display:none;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px 24px;}
+.item-lb.open{display:flex;}
+.item-lb-imgs{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:1500px;width:100%;flex:1;min-height:0;}
+.item-lb-side{display:flex;flex-direction:column;align-items:center;min-height:0;}
+.item-lb-side img{max-width:100%;flex:1;min-height:0;object-fit:contain;background:#000;border-radius:4px;}
+.item-lb-label{font-size:10px;font-family:"DM Mono",monospace;color:rgba(255,255,255,0.4);margin-top:8px;text-transform:uppercase;letter-spacing:.1em;}
+.item-lb-bar{margin-top:20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center;}
+.item-lb-name{font-size:13px;color:rgba(255,255,255,0.7);font-family:"DM Mono",monospace;}
+.regen-btn{background:#c94a0c;color:#fff;border:none;border-radius:6px;padding:10px 18px;font-family:"Syne",sans-serif;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:8px;}
+.regen-btn:hover:not(:disabled){background:#e8683a;}
+.regen-btn:disabled{opacity:.6;cursor:wait;}
+.regen-spin{width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin .65s linear infinite;display:none;}
+.regen-btn.running .regen-spin{display:block;}
+.item-lb-close{position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:50%;width:42px;height:42px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;}
+.item-lb-close:hover{background:#c94a0c;border-color:#c94a0c;}
+.item-lb-dl{font-size:11px;font-family:"DM Mono",monospace;color:rgba(255,255,255,0.6);text-decoration:underline;background:none;border:none;cursor:pointer;}
+.item-lb-dl:hover{color:#fff;}
+@media (max-width:700px){.item-lb-imgs{grid-template-columns:1fr;}.item-lb{padding:48px 12px 16px;}}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
@@ -399,7 +420,7 @@ function updateResultCard(item) {
   if (!card) return;
   if (item.status === 'done' && item.resultUrl) {
     card.innerHTML =
-      '<div class="rc-imgs"><img src="' + item.dataUrl + '"><img src="' + item.resultUrl + '"></div>' +
+      '<div class="rc-imgs clickable" onclick="openItemLb(\'' + item.id + '\')"><img src="' + item.dataUrl + '"><img src="' + item.resultUrl + '"></div>' +
       '<div class="rc-labels"><div class="rc-label">Before</div><div class="rc-label">After</div></div>' +
       '<div class="rc-body"><div class="rc-name">' + item.name + '</div>' +
       '<div class="rc-footer"><a class="dl-btn" href="' + item.resultUrl + '" download="' + item.name.replace(/\.[^.]+$/, '') + '_decluttered.png">Download result</a></div></div>';
@@ -420,7 +441,101 @@ function downloadResult(id) {
   a.download = item.name.replace(/\.[^.]+$/, '') + '_decluttered.png';
   a.click();
 }
+
+var currentLbItemId = null;
+
+function openItemLb(id) {
+  var item = queue.find(function(q) { return String(q.id) === String(id); });
+  if (!item || !item.resultUrl) return;
+  currentLbItemId = id;
+  document.getElementById('item-lb-before').src = item.dataUrl;
+  document.getElementById('item-lb-after').src = item.resultUrl + '?v=' + Date.now();
+  document.getElementById('item-lb-name').textContent = item.name;
+  var btn = document.getElementById('regen-btn');
+  btn.disabled = false; btn.classList.remove('running');
+  document.getElementById('regen-text').textContent = 'Regenerate this image';
+  document.getElementById('item-lb').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeItemLb() {
+  document.getElementById('item-lb').classList.remove('open');
+  document.body.style.overflow = '';
+  currentLbItemId = null;
+}
+
+async function regenerateCurrent() {
+  if (currentLbItemId == null) return;
+  var item = queue.find(function(q) { return String(q.id) === String(currentLbItemId); });
+  if (!item || !item.batchId) return;
+
+  var btn = document.getElementById('regen-btn');
+  var btnTxt = document.getElementById('regen-text');
+  btn.disabled = true; btn.classList.add('running');
+  btnTxt.textContent = 'Regenerating... (1-2 min)';
+
+  try {
+    var blob = await resizeToCanvas(item.dataUrl);
+    var form = new FormData();
+    form.append('image', blob, 'image.png');
+    form.append('prompt', document.getElementById('prompt').value);
+    form.append('batchId', item.batchId);
+    form.append('name', item.name);
+
+    var res = await fetch('/api/edit-image', { method: 'POST', body: form });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    if (!data.url) throw new Error('No URL returned');
+
+    item.resultUrl = data.url;
+    var busted = data.url + '?v=' + Date.now();
+    document.getElementById('item-lb-after').src = busted;
+    updateResultCard(item);
+
+    btn.disabled = false; btn.classList.remove('running');
+    btnTxt.textContent = 'Regenerate again';
+  } catch (e) {
+    btn.disabled = false; btn.classList.remove('running');
+    btnTxt.textContent = 'Retry regenerate';
+    showToast('Regenerate failed: ' + e.message);
+  }
+}
+
+function downloadCurrentLb() {
+  if (currentLbItemId == null) return;
+  var item = queue.find(function(q) { return String(q.id) === String(currentLbItemId); });
+  if (!item || !item.resultUrl) return;
+  var a = document.createElement('a');
+  a.href = item.resultUrl;
+  a.download = item.name.replace(/\.[^.]+$/, '') + '_decluttered.png';
+  a.click();
+}
+
+document.addEventListener('keydown', function(e) {
+  if (document.getElementById('item-lb').classList.contains('open') && e.key === 'Escape') {
+    closeItemLb();
+  }
+});
 </script>
 <div class="toast" id="toast"><div class="toast-dot"></div><span id="toast-msg">Batch ready!</span></div>
+
+<div class="item-lb" id="item-lb" onclick="if(event.target.id==='item-lb')closeItemLb()">
+  <button class="item-lb-close" onclick="closeItemLb()" aria-label="Close">&times;</button>
+  <div class="item-lb-imgs">
+    <div class="item-lb-side">
+      <img id="item-lb-before" alt="Before">
+      <div class="item-lb-label">Before (original)</div>
+    </div>
+    <div class="item-lb-side">
+      <img id="item-lb-after" alt="After">
+      <div class="item-lb-label">After (AI processed)</div>
+    </div>
+  </div>
+  <div class="item-lb-bar">
+    <span class="item-lb-name" id="item-lb-name"></span>
+    <button class="regen-btn" id="regen-btn" onclick="regenerateCurrent()"><div class="regen-spin"></div><span id="regen-text">Regenerate this image</span></button>
+    <button class="item-lb-dl" onclick="downloadCurrentLb()">Download after</button>
+  </div>
+</div>
 </body>
 </html>
