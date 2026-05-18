@@ -396,7 +396,13 @@ async function startProcessing() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ items: items.map(function(i) { return { name: i.name }; }) })
     });
-    var data = await res.json();
+    var raw = await res.text();
+    var data;
+    try { data = JSON.parse(raw); }
+    catch (e) {
+      var snippet = raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+      throw new Error('HTTP ' + res.status + ' (non-JSON): ' + (snippet || 'empty'));
+    }
     if (!res.ok || !data.id) throw new Error(data.error || 'batch create failed');
     batchId = data.id;
   } catch (e) {
@@ -454,7 +460,13 @@ async function processOneItem(item, batchId) {
     form.append('name', item.name);
 
     var res = await fetch('/api/edit-image', { method: 'POST', body: form });
-    var data = await res.json();
+    var raw = await res.text();
+    var data;
+    try { data = JSON.parse(raw); }
+    catch (e) {
+      var snippet = raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+      throw new Error('HTTP ' + res.status + ' (non-JSON): ' + (snippet || 'empty'));
+    }
     if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
     if (!data.url) throw new Error('No URL returned');
 
@@ -573,7 +585,13 @@ async function regenerateCurrent() {
     form.append('name', item.name);
 
     var res = await fetch('/api/edit-image', { method: 'POST', body: form });
-    var data = await res.json();
+    var raw = await res.text();
+    var data;
+    try { data = JSON.parse(raw); }
+    catch (e) {
+      var snippet = raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+      throw new Error('HTTP ' + res.status + ' (non-JSON): ' + (snippet || 'empty'));
+    }
     if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
     if (!data.url) throw new Error('No URL returned');
 
