@@ -534,8 +534,19 @@ function updateResultCard(item) {
     card.innerHTML =
       '<img src="' + item.dataUrl + '" style="width:100%;height:160px;object-fit:cover;display:block;filter:brightness(0.4)">' +
       '<div class="rc-body"><div class="rc-name">' + item.name + '</div>' +
-      '<div class="rc-err-msg">' + (item.errorMsg || 'Error') + '</div></div>';
+      '<div class="rc-err-msg">' + (item.errorMsg || 'Error') + '</div>' +
+      '<div class="rc-footer"><button class="dl-btn" onclick="retryItem(\'' + item.id + '\')">Retry</button></div></div>';
   }
+}
+
+async function retryItem(id) {
+  var item = queue.find(function(q) { return String(q.id) === String(id); });
+  if (!item || !item.batchId) return;
+  var oldCard = document.getElementById('rc-' + item.id);
+  if (oldCard) oldCard.remove();
+  item.status = 'wait';
+  item.errorMsg = null;
+  await processOneItem(item, item.batchId);
 }
 
 function downloadResult(id) {
