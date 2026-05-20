@@ -420,10 +420,6 @@ async function startProcessing() {
     await processOneItem(items[i], batchId);
   }
 
-  // Kickoffs complete; OpenAI work is running server-side via waitUntil.
-  // Poll the batch manifest to surface done/err as they happen.
-  await pollBatchUntilDone(batchId);
-
   running = false;
   updateBtn();
 
@@ -478,11 +474,9 @@ async function processOneItem(item, batchId) {
     }
     if (!data.url) throw new Error('No URL returned');
 
-    // Server processes OpenAI in the background. Item stays in 'proc'
-    // until polling sees the manifest flip to done/err. Stash the
-    // expected URL so the result card can render once it's ready.
+    item.status = 'done';
     item.resultUrl = data.url;
-    item.originalUrl = data.originalUrl;
+    updateResultCard(item);
   } catch (e) {
     item.status = 'err';
     item.errorMsg = e.message;
@@ -490,64 +484,6 @@ async function processOneItem(item, batchId) {
   }
 
   renderQueue(); updateStats(); updateBtn();
-}
-
-async function pollBatchUntilDone(batchId) {
-  var pollInterval = 4000;
-  var maxAttempts = 180; // ~12 min ceiling
-  for (var attempt = 0; attempt < maxAttempts; attempt++) {
-    await new Promise(function(r) { setTimeout(r, pollInterval); });
-
-    var manifest;
-    try {
-      var res = await fetch('/api/batch?id=' + encodeURIComponent(batchId));
-      if (!res.ok) continue;
-      manifest = await res.json();
-    } catch (e) { continue; }
-    if (!manifest || !manifest.items) continue;
-
-    var anyChange = false;
-    var allTerminal = true;
-    for (var i = 0; i < manifest.items.length; i++) {
-      var mItem = manifest.items[i];
-      var cItem = queue.find(function(it) { return it.batchId === batchId && it.name === mItem.name; });
-      if (!cItem) continue;
-      if (mItem.status === 'done' && cItem.status !== 'done') {
-        cItem.status = 'done';
-        if (mItem.filename) cItem.resultUrl = '/img/' + batchId + '/' + mItem.filename;
-        updateResultCard(cItem);
-        anyChange = true;
-      } else if (mItem.status === 'err' && cItem.status !== 'err') {
-        cItem.status = 'err';
-        cItem.errorMsg = mItem.error || 'Unknown error';
-        updateResultCard(cItem);
-        anyChange = true;
-      }
-      if (mItem.status !== 'done' && mItem.status !== 'err') allTerminal = false;
-    }
-    if (anyChange) {
-      renderQueue(); updateStats(); updateBtn();
-      var doneCount = queue.filter(function(i) { return i.batchId === batchId && i.status === 'done'; }).length;
-      var totalCount = queue.filter(function(i) { return i.batchId === batchId; }).length;
-      var countEl = document.getElementById(batchId + '-count');
-      if (countEl) countEl.textContent = doneCount + ' of ' + totalCount + ' done';
-    }
-    if (allTerminal) return;
-  }
-}
-
-async function pollItemUntilDone(batchId, name, maxAttempts) {
-  for (var i = 0; i < (maxAttempts || 180); i++) {
-    await new Promise(function(r) { setTimeout(r, 4000); });
-    try {
-      var res = await fetch('/api/batch?id=' + encodeURIComponent(batchId));
-      if (!res.ok) continue;
-      var manifest = await res.json();
-      var mItem = manifest.items.find(function(it) { return it.name === name; });
-      if (mItem && (mItem.status === 'done' || mItem.status === 'err')) return mItem;
-    } catch (e) {}
-  }
-  return { status: 'err', error: 'Polling timeout' };
 }
 
 function resizeToCanvas(dataUrl) {
@@ -666,10 +602,6 @@ async function regenerateCurrent() {
       throw new Error(msg);
     }
     if (!data.url) throw new Error('No URL returned');
-
-    // Server runs OpenAI in the background. Poll for completion.
-    var finalItem = await pollItemUntilDone(item.batchId, item.name, 180);
-    if (finalItem.status === 'err') throw new Error(finalItem.error || 'Regenerate failed');
 
     item.resultUrl = data.url;
     var busted = data.url + '?v=' + Date.now();
