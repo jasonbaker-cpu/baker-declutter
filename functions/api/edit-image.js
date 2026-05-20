@@ -15,7 +15,8 @@ export async function onRequestPost(context) {
         await sendTelegramIfComplete(context.env, batchId, origin);
       }
     } catch {}
-    return json({ error: 'Worker exception', detail: detail.slice(0, 2000) }, 500);
+    const msg = (e && e.message) ? e.message : String(e);
+    return json({ error: 'Worker exception: ' + msg.slice(0, 500), detail: detail.slice(0, 2000) }, 500);
   }
 }
 

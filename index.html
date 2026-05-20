@@ -467,7 +467,11 @@ async function processOneItem(item, batchId) {
       var snippet = raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
       throw new Error('HTTP ' + res.status + ' (non-JSON): ' + (snippet || 'empty'));
     }
-    if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    if (!res.ok) {
+      var msg = data.error || ('HTTP ' + res.status);
+      if (data.detail) msg += ' — ' + data.detail;
+      throw new Error(msg);
+    }
     if (!data.url) throw new Error('No URL returned');
 
     item.status = 'done';
@@ -592,7 +596,11 @@ async function regenerateCurrent() {
       var snippet = raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
       throw new Error('HTTP ' + res.status + ' (non-JSON): ' + (snippet || 'empty'));
     }
-    if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    if (!res.ok) {
+      var msg = data.error || ('HTTP ' + res.status);
+      if (data.detail) msg += ' — ' + data.detail;
+      throw new Error(msg);
+    }
     if (!data.url) throw new Error('No URL returned');
 
     item.resultUrl = data.url;
