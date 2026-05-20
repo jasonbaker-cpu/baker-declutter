@@ -1,0 +1,23 @@
+name = "baker-declutter2"
+compatibility_date = "2026-05-20"
+pages_build_output_dir = "."
+
+# Smart Placement runs the Pages Function on the Cloudflare edge nearest
+# OpenAI (US) instead of nearest the visitor. Eliminates the geographic
+# tail-latency that was killing the VA's calls with "Network connection
+# lost" — her edge in SE Asia had too far to reach OpenAI before the
+# per-subrequest budget ran out.
+[placement]
+mode = "smart"
+
+# Bindings MUST be declared here once wrangler.toml exists — Pages stops
+# reading them from the dashboard the moment this file is present. The
+# values below match what was attached in dashboard before; verified via
+# /api/debug after the last incident.
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "declutter-batches"
+
+[[kv_namespaces]]
+binding = "BATCHES"
+id = "97edeca0b1374fe8a7b018bcfff8f2f6"
