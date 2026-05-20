@@ -1,6 +1,25 @@
 import { sendTelegramIfComplete } from '../_lib/notify.js';
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost(context) {
+  try {
+    return await handle(context);
+  } catch (e) {
+    const detail = (e && (e.stack || e.message)) || String(e);
+    try {
+      const form = await context.request.clone().formData();
+      const batchId = form.get('batchId');
+      const name = form.get('name');
+      if (batchId && name) {
+        await updateItem(context.env, batchId, name, { status: 'err', error: 'Worker exception: ' + (e.message || String(e)) });
+        const origin = new URL(context.request.url).origin;
+        await sendTelegramIfComplete(context.env, batchId, origin);
+      }
+    } catch {}
+    return json({ error: 'Worker exception', detail: detail.slice(0, 2000) }, 500);
+  }
+}
+
+async function handle({ request, env }) {
   const form = await request.formData();
   const image = form.get('image');
   const prompt = form.get('prompt');
@@ -51,22 +70,22 @@ export async function onRequestPost({ request, env }) {
   try {
     data = JSON.parse(text);
   } catch {
-    await updateItem(env, batchId, name, { status: 'err', error: 'Invalid OpenAI response', originalKey, originalFilename });
+    await updateItem(env, batchId, name, { status: 'err', error: 'Invalid OpenAI response (HTTP ' + openaiRes.status + ')', originalKey, originalFilename });
     await sendTelegramIfComplete(env, batchId, origin);
-    return json({ error: 'Invalid OpenAI response', detail: text.slice(0, 500) }, 502);
+    return json({ error: 'Invalid OpenAI response', status: openaiRes.status, detail: text.slice(0, 500) }, 502);
   }
 
   if (data.error) {
     await updateItem(env, batchId, name, { status: 'err', error: data.error.message, originalKey, originalFilename });
     await sendTelegramIfComplete(env, batchId, origin);
-    return json({ error: data.error.message }, 502);
+    return json({ error: data.error.message, openaiStatus: openaiRes.status }, 502);
   }
 
   const b64 = data?.data?.[0]?.b64_json;
   if (!b64) {
     await updateItem(env, batchId, name, { status: 'err', error: 'No image in response', originalKey, originalFilename });
     await sendTelegramIfComplete(env, batchId, origin);
-    return json({ error: 'No image returned' }, 502);
+    return json({ error: 'No image returned', openaiStatus: openaiRes.status }, 502);
   }
 
   const resultBytes = base64ToBytes(b64);
