@@ -1,0 +1,35 @@
+name = "declutter-consumer"
+main = "src/index.js"
+compatibility_date = "2026-05-20"
+
+# Smart Placement helps individual subrequests reach OpenAI fast.
+# Together with one-message-per-invocation batching, this keeps each
+# OpenAI call inside the Worker subrequest budget.
+[placement]
+mode = "smart"
+
+# Pull jobs off the `declutter-jobs` queue.
+# max_batch_size = 1 — process exactly one message per Worker invocation
+#   so each OpenAI call has its own fresh runtime budget. (Default of 10
+#   would force 10 OpenAI calls into one invocation = guaranteed timeout.)
+# max_retries = 3 — retry a failed message up to 3 times before giving up.
+# max_batch_timeout = 5 — wait at most 5s to fill a batch before invoking.
+[[queues.consumers]]
+queue = "declutter-jobs"
+max_batch_size = 1
+max_retries = 3
+max_batch_timeout = 5
+
+# Same R2 bucket the Pages Function writes originals to.
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "declutter-batches"
+
+# Same KV namespace that holds batch manifests.
+[[kv_namespaces]]
+binding = "BATCHES"
+id = "97edeca0b1374fe8a7b018bcfff8f2f6"
+
+# Secrets (OPENAI_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID) are set
+# via `wrangler secret put <NAME>` or the dashboard. They're not in
+# this file by design — keeps secrets out of git.

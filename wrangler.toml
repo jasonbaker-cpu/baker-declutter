@@ -21,3 +21,9 @@ bucket_name = "declutter-batches"
 [[kv_namespaces]]
 binding = "BATCHES"
 id = "97edeca0b1374fe8a7b018bcfff8f2f6"
+
+# Pages Function is the producer — sends jobs to the queue. The consumer
+# Worker (workers/consumer) pulls them off and does the OpenAI work.
+[[queues.producers]]
+binding = "DECLUTTER_QUEUE"
+queue = "declutter-jobs"
