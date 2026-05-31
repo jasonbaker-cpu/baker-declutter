@@ -112,6 +112,13 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
 .touchup-btn.running .regen-spin{display:block;}
 .item-lb-close{position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:50%;width:42px;height:42px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;}
 .item-lb-close:hover{background:#c94a0c;border-color:#c94a0c;}
+.item-lb-nav{position:absolute;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;font-family:"DM Mono",monospace;backdrop-filter:blur(4px);top:50%;transform:translateY(-50%);}
+.item-lb-nav:hover{background:#c94a0c;border-color:#c94a0c;}
+.item-lb-nav:disabled{opacity:.25;cursor:not-allowed;}
+.item-lb-nav:disabled:hover{background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.15);}
+.item-lb-prev{left:16px;}
+.item-lb-next{right:16px;}
+.item-lb-counter{font-size:12px;font-family:"DM Mono",monospace;color:#c94a0c;font-weight:600;}
 .item-lb-dl{font-size:11px;font-family:"DM Mono",monospace;color:rgba(255,255,255,0.6);text-decoration:underline;background:none;border:none;cursor:pointer;}
 .item-lb-dl:hover{color:#fff;}
 @media (max-width:700px){.item-lb-imgs{grid-template-columns:1fr;}.item-lb{padding:48px 12px 16px;}}
@@ -657,14 +664,38 @@ function downloadResult(id) {
 }
 
 var currentLbItemId = null;
+var currentLbBatchItems = []; // items in the same batch that have a resultUrl, in card order
+var currentLbIdx = 0;
 
 function openItemLb(id) {
   var item = queue.find(function(q) { return String(q.id) === String(id); });
   if (!item || !item.resultUrl) return;
-  currentLbItemId = id;
+  // Build the navigable set: every done item in the same batch, in queue order.
+  currentLbBatchItems = queue.filter(function(q) {
+    return q.batchId === item.batchId && q.resultUrl;
+  });
+  currentLbIdx = currentLbBatchItems.findIndex(function(q) { return String(q.id) === String(id); });
+  if (currentLbIdx < 0) currentLbIdx = 0;
+  loadLbItem(currentLbIdx);
+  document.getElementById('item-lb').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function loadLbItem(idx) {
+  if (!currentLbBatchItems.length) return;
+  if (idx < 0) idx = 0;
+  if (idx >= currentLbBatchItems.length) idx = currentLbBatchItems.length - 1;
+  currentLbIdx = idx;
+  var item = currentLbBatchItems[idx];
+  currentLbItemId = item.id;
   document.getElementById('item-lb-before').src = item.dataUrl;
   document.getElementById('item-lb-after').src = item.resultUrl + '?v=' + Date.now();
   document.getElementById('item-lb-name').textContent = item.name;
+  document.getElementById('item-lb-counter').textContent =
+    (idx + 1) + ' / ' + currentLbBatchItems.length;
+  document.getElementById('item-lb-prev').disabled = (idx === 0);
+  document.getElementById('item-lb-next').disabled = (idx === currentLbBatchItems.length - 1);
+  // Reset action button states whenever we switch images.
   var btn = document.getElementById('regen-btn');
   btn.disabled = false; btn.classList.remove('running');
   document.getElementById('regen-text').textContent = 'Regenerate this image';
@@ -672,14 +703,29 @@ function openItemLb(id) {
   tBtn.disabled = false; tBtn.classList.remove('running');
   document.getElementById('touchup-text').textContent = 'Touch up';
   document.getElementById('touchup-input').value = '';
-  document.getElementById('item-lb').classList.add('open');
-  document.body.style.overflow = 'hidden';
+  // Preload neighbours.
+  if (currentLbBatchItems.length > 1) {
+    var nxt = currentLbBatchItems[(idx + 1) % currentLbBatchItems.length];
+    var prv = currentLbBatchItems[(idx - 1 + currentLbBatchItems.length) % currentLbBatchItems.length];
+    if (nxt && nxt.resultUrl) new Image().src = nxt.resultUrl;
+    if (prv && prv.resultUrl) new Image().src = prv.resultUrl;
+  }
+}
+
+function prevLbItem() {
+  if (currentLbIdx > 0) loadLbItem(currentLbIdx - 1);
+}
+
+function nextLbItem() {
+  if (currentLbIdx < currentLbBatchItems.length - 1) loadLbItem(currentLbIdx + 1);
 }
 
 function closeItemLb() {
   document.getElementById('item-lb').classList.remove('open');
   document.body.style.overflow = '';
   currentLbItemId = null;
+  currentLbBatchItems = [];
+  currentLbIdx = 0;
 }
 
 async function regenerateCurrent() {
@@ -795,10 +841,27 @@ function downloadCurrentLb() {
 }
 
 document.addEventListener('keydown', function(e) {
-  if (document.getElementById('item-lb').classList.contains('open') && e.key === 'Escape') {
-    closeItemLb();
-  }
+  if (!document.getElementById('item-lb').classList.contains('open')) return;
+  // Don't hijack arrows while the user is typing in the touch-up input.
+  var active = document.activeElement;
+  var typing = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+  if (e.key === 'Escape') closeItemLb();
+  else if (!typing && e.key === 'ArrowLeft') prevLbItem();
+  else if (!typing && e.key === 'ArrowRight') nextLbItem();
 });
+
+var itemLbTouchStartX = 0;
+(function() {
+  var lb = document.getElementById('item-lb');
+  if (!lb) return;
+  lb.addEventListener('touchstart', function(e) {
+    itemLbTouchStartX = e.changedTouches[0].screenX;
+  });
+  lb.addEventListener('touchend', function(e) {
+    var diff = e.changedTouches[0].screenX - itemLbTouchStartX;
+    if (Math.abs(diff) > 50) { if (diff < 0) nextLbItem(); else prevLbItem(); }
+  });
+})();
 
 async function loadRecentBatches() {
   try {
@@ -848,6 +911,8 @@ loadRecentBatches();
 
 <div class="item-lb" id="item-lb" onclick="if(event.target.id==='item-lb')closeItemLb()">
   <button class="item-lb-close" onclick="closeItemLb()" aria-label="Close">&times;</button>
+  <button class="item-lb-nav item-lb-prev" id="item-lb-prev" onclick="prevLbItem()" aria-label="Previous">&#8249;</button>
+  <button class="item-lb-nav item-lb-next" id="item-lb-next" onclick="nextLbItem()" aria-label="Next">&#8250;</button>
   <div class="item-lb-imgs">
     <div class="item-lb-side">
       <img id="item-lb-before" alt="Before">
@@ -859,6 +924,7 @@ loadRecentBatches();
     </div>
   </div>
   <div class="item-lb-bar">
+    <span class="item-lb-counter" id="item-lb-counter"></span>
     <span class="item-lb-name" id="item-lb-name"></span>
     <input type="text" class="touchup-input" id="touchup-input" placeholder="What's still wrong? e.g. remove the box in the corner" onkeydown="if(event.key==='Enter')touchupCurrent()">
     <button class="touchup-btn" id="touchup-btn" onclick="touchupCurrent()"><div class="regen-spin"></div><span id="touchup-text">Touch up</span></button>
