@@ -59,7 +59,6 @@ async function processJob(job, env) {
         ],
       },
     ],
-    generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
   };
 
   const geminiRes = await fetch(
