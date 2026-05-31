@@ -62,7 +62,7 @@ async function processJob(job, env) {
   };
 
   const geminiRes = await fetch(
-    'https://generativelanguage.googleapis.com/v1/models/gemini-3-pro-image:generateContent',
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
     {
       method: 'POST',
       headers: {
