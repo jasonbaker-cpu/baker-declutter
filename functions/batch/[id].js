@@ -103,6 +103,15 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
 .lb-name{font-size:12px;font-family:"DM Mono",monospace;color:rgba(255,255,255,0.7);max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .lb-dl{font-size:11px;font-family:"DM Mono",monospace;color:#fff;text-decoration:underline;cursor:pointer;background:none;border:none;}
 .lb-dl:hover{color:#c94a0c;}
+.tu-input{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);color:#fff;border-radius:6px;padding:9px 12px;font-family:"DM Mono",monospace;font-size:12px;min-width:260px;}
+.tu-input::placeholder{color:rgba(255,255,255,0.35);}
+.tu-input:focus{outline:none;border-color:#c94a0c;background:rgba(255,255,255,0.1);}
+.tu-btn{background:rgba(255,255,255,0.08);color:#fff;border:1px solid rgba(255,255,255,0.18);border-radius:6px;padding:9px 16px;font-family:"Syne",sans-serif;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:8px;}
+.tu-btn:hover:not(:disabled){background:rgba(255,255,255,0.14);border-color:rgba(255,255,255,0.3);}
+.tu-btn:disabled{opacity:.6;cursor:wait;}
+.tu-spin{width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:tu-spin .65s linear infinite;display:none;}
+.tu-btn.running .tu-spin{display:block;}
+@keyframes tu-spin{to{transform:rotate(360deg);}}
 .lb-btn{position:absolute;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;font-family:"DM Mono",monospace;transition:all .15s;backdrop-filter:blur(4px);}
 .lb-btn:hover{background:#c94a0c;border-color:#c94a0c;}
 .lb-close{top:16px;right:16px;}
@@ -152,6 +161,8 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
   <div class="lb-bar">
     <span class="lb-counter" id="lb-counter">1 / 1</span>
     <span class="lb-name" id="lb-name"></span>
+    <input type="text" class="tu-input" id="tu-input" placeholder="What's still wrong? e.g. remove the box in the corner" onkeydown="if(event.key==='Enter')tuRun()">
+    <button class="tu-btn" id="tu-btn" onclick="tuRun()"><div class="tu-spin"></div><span id="tu-text">Touch up</span></button>
     <button class="lb-dl" id="lb-dl" onclick="lbDownload()">Download after</button>
   </div>
 </div>
@@ -195,6 +206,14 @@ function updateLb() {
   document.getElementById('lb-after').src = img.after;
   document.getElementById('lb-counter').textContent = (lbIdx + 1) + ' / ' + IMGS.length;
   document.getElementById('lb-name').textContent = img.name;
+  // Reset touch-up state when switching images
+  var tuBtn = document.getElementById('tu-btn');
+  if (tuBtn) {
+    tuBtn.disabled = false;
+    tuBtn.classList.remove('running');
+    document.getElementById('tu-text').textContent = 'Touch up';
+    document.getElementById('tu-input').value = '';
+  }
   if (IMGS.length > 1) {
     var next = IMGS[(lbIdx + 1) % IMGS.length];
     var prev = IMGS[(lbIdx - 1 + IMGS.length) % IMGS.length];
@@ -208,6 +227,73 @@ function lbDownload() {
   a.href = img.after;
   a.download = img.filename;
   a.click();
+}
+
+async function tuRun() {
+  var idx = lbIdx;
+  var img = IMGS[idx];
+  if (!img) return;
+  var input = document.getElementById('tu-input');
+  var tuPrompt = input.value.trim();
+  if (!tuPrompt) { input.focus(); return; }
+
+  var btn = document.getElementById('tu-btn');
+  var txt = document.getElementById('tu-text');
+  btn.disabled = true; btn.classList.add('running');
+  txt.textContent = 'Touching up... (1-2 min)';
+
+  try {
+    var res = await fetch('/api/touch-up', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ batchId: BATCH_ID, name: img.name, prompt: tuPrompt }),
+    });
+    var raw = await res.text();
+    var data;
+    try { data = JSON.parse(raw); }
+    catch (e) {
+      throw new Error('HTTP ' + res.status + ' (non-JSON): ' + raw.slice(0, 200));
+    }
+    if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    if (!data.url) throw new Error('No URL returned');
+
+    // Poll the batch manifest until this item flips to done or err.
+    var finalItem = null;
+    for (var i = 0; i < 360; i++) {
+      await new Promise(function(r) { setTimeout(r, 2000); });
+      var pres = await fetch('/api/batch?id=' + encodeURIComponent(BATCH_ID));
+      var pdata = await pres.json();
+      var pi = (pdata.items || []).find(function(x) { return x.name === img.name; });
+      if (pi && (pi.status === 'done' || pi.status === 'err')) { finalItem = pi; break; }
+    }
+    if (!finalItem) throw new Error('Timed out waiting for touch-up');
+    if (finalItem.status === 'err') throw new Error(finalItem.error || 'Touch-up failed');
+
+    // Swap in the new image and update the grid card too.
+    img.filename = finalItem.filename;
+    img.after = '/img/' + BATCH_ID + '/' + finalItem.filename;
+    var busted = img.after + '?v=' + Date.now();
+    if (lbIdx === idx) document.getElementById('lb-after').src = busted;
+    var card = document.querySelectorAll('.card')[idx];
+    if (card) {
+      var imgs = card.querySelectorAll('img');
+      var afterImg = imgs[imgs.length - 1];
+      if (afterImg) afterImg.src = busted;
+      var dl = card.querySelector('.dl-btn');
+      if (dl) {
+        dl.setAttribute('href', img.after);
+        dl.setAttribute('download', img.filename);
+      }
+    }
+
+    btn.disabled = false; btn.classList.remove('running');
+    txt.textContent = 'Touch up';
+    input.value = '';
+  } catch (e) {
+    btn.disabled = false; btn.classList.remove('running');
+    txt.textContent = 'Try again';
+    alert('Touch up failed: ' + (e.message || e));
+  }
 }
 
 document.addEventListener('keydown', function(e) {
