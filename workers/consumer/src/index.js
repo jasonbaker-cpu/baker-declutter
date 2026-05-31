@@ -164,18 +164,27 @@ async function sendTelegramIfComplete(env, batchId, origin) {
   if (manifest.label) lines.push(escapeMd(manifest.label));
   if (errs.length) lines.push(`${errs.length} failed`);
   lines.push('', `[Open gallery](${galleryUrl})`);
-  try {
-    await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: env.TELEGRAM_CHAT_ID,
-        text: lines.join('\n'),
-        parse_mode: 'Markdown',
-        disable_web_page_preview: true,
-      }),
-    });
-  } catch {}
+  // TELEGRAM_CHAT_ID may hold one chat ID or a comma-separated list — send
+  // to each. Per-chat failures are swallowed so one offline chat can't
+  // block the others.
+  const chatIds = String(env.TELEGRAM_CHAT_ID || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const chatId of chatIds) {
+    try {
+      await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: lines.join('\n'),
+          parse_mode: 'Markdown',
+          disable_web_page_preview: true,
+        }),
+      });
+    } catch {}
+  }
 }
 
 function escapeMd(s) {

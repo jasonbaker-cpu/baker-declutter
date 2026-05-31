@@ -26,32 +26,42 @@ export async function sendTelegramIfComplete(env, batchId, origin) {
   if (errs.length) lines.push(`${errs.length} failed`);
   lines.push('', `[Open gallery](${galleryUrl})`);
 
-  try {
-    const res = await fetch(
-      `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: env.TELEGRAM_CHAT_ID,
-          text: lines.join('\n'),
-          parse_mode: 'Markdown',
-          disable_web_page_preview: true,
-        }),
-      }
-    );
-    if (!res.ok) {
-      manifest.notified = false;
-      await env.BATCHES.put(`batch:${batchId}`, JSON.stringify(manifest));
-      const detail = await res.text();
-      return { error: 'Telegram failed', status: res.status, detail };
+  // TELEGRAM_CHAT_ID may hold one chat ID or a comma-separated list. Send
+  // to each, treat the batch as "notified" if at least one succeeds. Only
+  // roll back `notified` if every chat fails (so we retry next time).
+  const chatIds = String(env.TELEGRAM_CHAT_ID || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const results = [];
+  for (const chatId of chatIds) {
+    try {
+      const res = await fetch(
+        `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: lines.join('\n'),
+            parse_mode: 'Markdown',
+            disable_web_page_preview: true,
+          }),
+        }
+      );
+      if (res.ok) results.push({ chatId, ok: true });
+      else results.push({ chatId, ok: false, status: res.status, detail: await res.text() });
+    } catch (e) {
+      results.push({ chatId, ok: false, error: e.message });
     }
-    return { ok: true, done: done.length, total, galleryUrl };
-  } catch (e) {
+  }
+  const anyOk = results.some((r) => r.ok);
+  if (!anyOk) {
     manifest.notified = false;
     await env.BATCHES.put(`batch:${batchId}`, JSON.stringify(manifest));
-    return { error: 'Telegram exception', message: e.message };
+    return { error: 'All Telegram chats failed', results };
   }
+  return { ok: true, done: done.length, total, galleryUrl, results };
 }
 
 // Telegram parse_mode: 'Markdown' (v1) only treats _ * [ ` as special.
