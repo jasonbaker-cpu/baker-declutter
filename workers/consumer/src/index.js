@@ -1,7 +1,7 @@
 // Queue consumer Worker for baker-declutter.
 //
 // Pulls one job per invocation off the `declutter-jobs` queue, runs the
-// OpenAI image-edit, stores the result to R2, updates the batch manifest
+// Gemini image-edit, stores the result to R2, updates the batch manifest
 // in KV. On any throw the message is retried by Cloudflare automatically
 // (up to whatever max_retries is set in wrangler.toml). After retries are
 // exhausted the message goes to the configured DLQ — or is dropped if no
@@ -48,32 +48,44 @@ async function processJob(job, env) {
   if (!originalObj) throw new Error('Original not found in R2: ' + originalKey);
   const imageBytes = await originalObj.arrayBuffer();
 
-  const openaiForm = new FormData();
-  openaiForm.append('model', 'gpt-image-2');
-  openaiForm.append('image[]', new Blob([imageBytes], { type: 'image/png' }), 'image.png');
-  openaiForm.append('prompt', String(prompt).slice(0, 32000));
-  openaiForm.append('n', '1');
-  openaiForm.append('size', '1920x1280');
-  openaiForm.append('quality', 'high');
+  const imageBase64 = bytesToBase64(new Uint8Array(imageBytes));
 
-  const openaiRes = await fetch('https://api.openai.com/v1/images/edits', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${env.OPENAI_KEY}` },
-    body: openaiForm,
-  });
+  const geminiBody = {
+    contents: [
+      {
+        parts: [
+          { text: String(prompt).slice(0, 32000) },
+          { inline_data: { mime_type: 'image/png', data: imageBase64 } },
+        ],
+      },
+    ],
+    generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+  };
 
-  const text = await openaiRes.text();
+  const geminiRes = await fetch(
+    'https://generativelanguage.googleapis.com/v1/models/gemini-3-pro-image:generateContent',
+    {
+      method: 'POST',
+      headers: {
+        'x-goog-api-key': env.GEMINI_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(geminiBody),
+    }
+  );
+
+  const text = await geminiRes.text();
   let data;
   try {
     data = JSON.parse(text);
   } catch {
-    throw new Error('Invalid OpenAI response (HTTP ' + openaiRes.status + '): ' + text.slice(0, 300));
+    throw new Error('Invalid Gemini response (HTTP ' + geminiRes.status + '): ' + text.slice(0, 300));
   }
 
   if (data.error) {
-    // OpenAI returned a structured error (bad request, content policy,
-    // etc.). These will not succeed on retry, so mark terminal err and
-    // ack (do not retry) by returning normally.
+    // Structured error (bad request, content policy, etc.). These will
+    // not succeed on retry, so mark terminal err and ack (do not retry)
+    // by returning normally.
     await updateItem(env, batchId, name, {
       status: 'err',
       error: data.error.message,
@@ -82,8 +94,10 @@ async function processJob(job, env) {
     return;
   }
 
-  const b64 = data?.data?.[0]?.b64_json;
-  if (!b64) throw new Error('No image in OpenAI response');
+  const parts = data?.candidates?.[0]?.content?.parts || [];
+  const imagePart = parts.find((p) => p?.inlineData?.data);
+  const b64 = imagePart?.inlineData?.data;
+  if (!b64) throw new Error('No image in Gemini response');
 
   const resultBytes = base64ToBytes(b64);
 
@@ -117,6 +131,15 @@ function base64ToBytes(b64) {
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return bytes;
+}
+
+function bytesToBase64(bytes) {
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
 }
 
 async function sendTelegramIfComplete(env, batchId, origin) {
