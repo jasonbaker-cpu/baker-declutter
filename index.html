@@ -100,6 +100,13 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
 .regen-btn:disabled{opacity:.6;cursor:wait;}
 .regen-spin{width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin .65s linear infinite;display:none;}
 .regen-btn.running .regen-spin{display:block;}
+.touchup-input{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);color:#fff;border-radius:6px;padding:10px 12px;font-family:"DM Mono",monospace;font-size:12px;min-width:280px;}
+.touchup-input::placeholder{color:rgba(255,255,255,0.35);}
+.touchup-input:focus{outline:none;border-color:#c94a0c;background:rgba(255,255,255,0.1);}
+.touchup-btn{background:rgba(255,255,255,0.08);color:#fff;border:1px solid rgba(255,255,255,0.18);border-radius:6px;padding:10px 16px;font-family:"Syne",sans-serif;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:8px;}
+.touchup-btn:hover:not(:disabled){background:rgba(255,255,255,0.14);border-color:rgba(255,255,255,0.3);}
+.touchup-btn:disabled{opacity:.6;cursor:wait;}
+.touchup-btn.running .regen-spin{display:block;}
 .item-lb-close{position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:50%;width:42px;height:42px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;}
 .item-lb-close:hover{background:#c94a0c;border-color:#c94a0c;}
 .item-lb-dl{font-size:11px;font-family:"DM Mono",monospace;color:rgba(255,255,255,0.6);text-decoration:underline;background:none;border:none;cursor:pointer;}
@@ -643,6 +650,10 @@ function openItemLb(id) {
   var btn = document.getElementById('regen-btn');
   btn.disabled = false; btn.classList.remove('running');
   document.getElementById('regen-text').textContent = 'Regenerate this image';
+  var tBtn = document.getElementById('touchup-btn');
+  tBtn.disabled = false; tBtn.classList.remove('running');
+  document.getElementById('touchup-text').textContent = 'Touch up';
+  document.getElementById('touchup-input').value = '';
   document.getElementById('item-lb').classList.add('open');
   document.body.style.overflow = 'hidden';
 }
@@ -701,6 +712,57 @@ async function regenerateCurrent() {
     btn.disabled = false; btn.classList.remove('running');
     btnTxt.textContent = 'Retry regenerate';
     showToast('Regenerate failed: ' + e.message);
+  }
+}
+
+async function touchupCurrent() {
+  if (currentLbItemId == null) return;
+  var item = queue.find(function(q) { return String(q.id) === String(currentLbItemId); });
+  if (!item || !item.batchId) return;
+  var input = document.getElementById('touchup-input');
+  var tuPrompt = input.value.trim();
+  if (!tuPrompt) { input.focus(); return; }
+
+  var btn = document.getElementById('touchup-btn');
+  var btnTxt = document.getElementById('touchup-text');
+  btn.disabled = true; btn.classList.add('running');
+  btnTxt.textContent = 'Touching up... (1-2 min)';
+
+  try {
+    var res = await fetch('/api/touch-up', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ batchId: item.batchId, name: item.name, prompt: tuPrompt }),
+    });
+    var raw = await res.text();
+    var data;
+    try { data = JSON.parse(raw); }
+    catch (e) {
+      var snippet = raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+      throw new Error('HTTP ' + res.status + ' (non-JSON): ' + (snippet || 'empty'));
+    }
+    if (!res.ok) {
+      var msg = data.error || ('HTTP ' + res.status);
+      if (data.detail) msg += ' — ' + data.detail;
+      throw new Error(msg);
+    }
+    if (!data.url) throw new Error('No URL returned');
+
+    var finalItem = await pollItemUntilDone(item.batchId, item.name, 360);
+    if (finalItem.status === 'err') throw new Error(finalItem.error || 'Touch-up failed');
+
+    item.resultUrl = data.url;
+    var busted = data.url + '?v=' + Date.now();
+    document.getElementById('item-lb-after').src = busted;
+    updateResultCard(item);
+
+    btn.disabled = false; btn.classList.remove('running');
+    btnTxt.textContent = 'Touch up';
+    input.value = '';
+  } catch (e) {
+    btn.disabled = false; btn.classList.remove('running');
+    btnTxt.textContent = 'Try again';
+    showToast('Touch up failed: ' + e.message);
   }
 }
 
@@ -779,6 +841,8 @@ loadRecentBatches();
   </div>
   <div class="item-lb-bar">
     <span class="item-lb-name" id="item-lb-name"></span>
+    <input type="text" class="touchup-input" id="touchup-input" placeholder="What's still wrong? e.g. remove the box in the corner" onkeydown="if(event.key==='Enter')touchupCurrent()">
+    <button class="touchup-btn" id="touchup-btn" onclick="touchupCurrent()"><div class="regen-spin"></div><span id="touchup-text">Touch up</span></button>
     <button class="regen-btn" id="regen-btn" onclick="regenerateCurrent()"><div class="regen-spin"></div><span id="regen-text">Regenerate this image</span></button>
     <button class="item-lb-dl" onclick="downloadCurrentLb()">Download after</button>
   </div>

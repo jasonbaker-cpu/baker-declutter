@@ -34,7 +34,7 @@ export default {
 };
 
 async function processJob(job, env) {
-  const { batchId, name, prompt, originalKey, originalFilename, filename, resultKey, origin } = job;
+  const { batchId, name, prompt, originalKey, originalFilename, filename, resultKey, sourceKey, origin } = job;
 
   // Mark the item back to 'proc' if we're being retried after a previous
   // attempt wrote 'err' — keeps the UI in sync with the current attempt.
@@ -44,9 +44,12 @@ async function processJob(job, env) {
     consumerStartedAt: new Date().toISOString(),
   });
 
-  const originalObj = await env.R2_BUCKET.get(originalKey);
-  if (!originalObj) throw new Error('Original not found in R2: ' + originalKey);
-  const imageBytes = await originalObj.arrayBuffer();
+  // For touch-up jobs sourceKey points at the previous result; for the
+  // first pass it's absent and we read the upload at originalKey.
+  const inputKey = sourceKey || originalKey;
+  const inputObj = await env.R2_BUCKET.get(inputKey);
+  if (!inputObj) throw new Error('Input not found in R2: ' + inputKey);
+  const imageBytes = await inputObj.arrayBuffer();
 
   const imageBase64 = bytesToBase64(new Uint8Array(imageBytes));
 
@@ -59,6 +62,9 @@ async function processJob(job, env) {
         ],
       },
     ],
+    generationConfig: {
+      imageConfig: { imageSize: '4K' },
+    },
   };
 
   const geminiRes = await fetch(
