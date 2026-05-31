@@ -161,6 +161,7 @@ async function sendTelegramIfComplete(env, batchId, origin) {
   const total = manifest.items.length;
   const galleryUrl = `${origin}/batch/${batchId}`;
   const lines = [`*Batch ready* — ${done.length} of ${total} processed`];
+  if (manifest.label) lines.push(escapeMd(manifest.label));
   if (errs.length) lines.push(`${errs.length} failed`);
   lines.push('', `[Open gallery](${galleryUrl})`);
   try {
@@ -175,4 +176,8 @@ async function sendTelegramIfComplete(env, batchId, origin) {
       }),
     });
   } catch {}
+}
+
+function escapeMd(s) {
+  return String(s).replace(/([_*\[\]`])/g, '\\$1');
 }

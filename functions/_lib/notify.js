@@ -22,6 +22,7 @@ export async function sendTelegramIfComplete(env, batchId, origin) {
   const galleryUrl = `${origin}/batch/${batchId}`;
 
   const lines = [`*Batch ready* — ${done.length} of ${total} processed`];
+  if (manifest.label) lines.push(escapeMd(manifest.label));
   if (errs.length) lines.push(`${errs.length} failed`);
   lines.push('', `[Open gallery](${galleryUrl})`);
 
@@ -51,4 +52,9 @@ export async function sendTelegramIfComplete(env, batchId, origin) {
     await env.BATCHES.put(`batch:${batchId}`, JSON.stringify(manifest));
     return { error: 'Telegram exception', message: e.message };
   }
+}
+
+// Telegram parse_mode: 'Markdown' (v1) only treats _ * [ ` as special.
+function escapeMd(s) {
+  return String(s).replace(/([_*\[\]`])/g, '\\$1');
 }
