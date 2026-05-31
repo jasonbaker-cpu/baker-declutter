@@ -31,6 +31,48 @@ export default {
       }
     }
   },
+
+  // TEMPORARY one-shot helper: GET /chats returns the distinct chats the
+  // bot has recently received messages from. Used to discover a new group's
+  // chat ID without adding third-party ID bots. REMOVE this handler once
+  // the chat ID has been captured.
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    if (url.pathname !== '/chats') {
+      return new Response('not found', { status: 404 });
+    }
+    const tgRes = await fetch(
+      `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getUpdates`
+    );
+    const data = await tgRes.json();
+    if (!data.ok) {
+      return new Response(JSON.stringify(data, null, 2), {
+        status: 500,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    const chats = new Map();
+    for (const update of data.result || []) {
+      const msg =
+        update.message ||
+        update.channel_post ||
+        update.edited_message ||
+        update.edited_channel_post;
+      if (msg && msg.chat) {
+        chats.set(msg.chat.id, {
+          id: msg.chat.id,
+          type: msg.chat.type,
+          title:
+            msg.chat.title ||
+            msg.chat.username ||
+            [msg.chat.first_name, msg.chat.last_name].filter(Boolean).join(' '),
+        });
+      }
+    }
+    return new Response(JSON.stringify([...chats.values()], null, 2), {
+      headers: { 'content-type': 'application/json' },
+    });
+  },
 };
 
 async function processJob(job, env) {
