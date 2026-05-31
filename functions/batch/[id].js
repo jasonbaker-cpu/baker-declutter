@@ -57,7 +57,7 @@ export async function onRequestGet({ params, env, request }) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${escapeHtml(id)} &mdash; Baker Declutter</title>
+<title>${escapeHtml(manifest.label || id)} &mdash; Baker Declutter</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -125,8 +125,8 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
 <div class="wrap">
   <div class="batch-meta">
     <div>
-      <div class="batch-title">${escapeHtml(id)}</div>
-      <div class="batch-sub">${escapeHtml(created)} &middot; ${done.length} of ${manifest.items.length} done${errs.length ? ` &middot; ${errs.length} failed` : ''}</div>
+      <div class="batch-title">${escapeHtml(manifest.label || id)}</div>
+      <div class="batch-sub">${manifest.label ? `${escapeHtml(id)} &middot; ` : ''}${escapeHtml(created)} &middot; ${done.length} of ${manifest.items.length} done${errs.length ? ` &middot; ${errs.length} failed` : ''}</div>
     </div>
     ${done.length ? `<button class="dl-all-btn" id="dl-all" onclick="downloadAll()">Download all (.zip)</button>` : ''}
   </div>

@@ -10,6 +10,7 @@ export async function onRequestGet({ env }) {
       const doneItems = m.items.filter((i) => i.status === 'done' && i.filename);
       return {
         id: m.id,
+        label: m.label || null,
         createdAt: m.createdAt,
         total: m.items.length,
         done: doneItems.length,

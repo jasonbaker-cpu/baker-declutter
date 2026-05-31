@@ -100,6 +100,9 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
 .regen-btn:disabled{opacity:.6;cursor:wait;}
 .regen-spin{width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin .65s linear infinite;display:none;}
 .regen-btn.running .regen-spin{display:block;}
+.batch-label-input{width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:6px;padding:10px 12px;font-family:"DM Mono",monospace;font-size:12px;margin:8px 0;box-sizing:border-box;}
+.batch-label-input::placeholder{color:rgba(255,255,255,0.35);}
+.batch-label-input:focus{outline:none;border-color:#c94a0c;background:rgba(255,255,255,0.08);}
 .touchup-input{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);color:#fff;border-radius:6px;padding:10px 12px;font-family:"DM Mono",monospace;font-size:12px;min-width:280px;}
 .touchup-input::placeholder{color:rgba(255,255,255,0.35);}
 .touchup-input:focus{outline:none;border-color:#c94a0c;background:rgba(255,255,255,0.1);}
@@ -142,6 +145,7 @@ body{font-family:"Syne",sans-serif;background:#080808;color:#fff;min-height:100v
       <button class="browse-btn">Browse files</button>
     </div>
     <input type="file" id="file-input" multiple accept="image/*">
+    <input type="text" class="batch-label-input" id="batch-label" placeholder="Property address (optional)">
     <div>
       <div class="presets">
         <button class="preset" type="button" data-preset="bit" onclick="applyPreset('bit')">Declutter a bit</button>
@@ -264,7 +268,13 @@ function showToast(msgHtml, persist) {
   if (!persist) setTimeout(function() { t.classList.remove('show'); }, 6000);
 }
 
-function createBatchSection(batchId, items) {
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+  });
+}
+
+function createBatchSection(batchId, items, label) {
   var results_el = document.getElementById('results');
   var empty = results_el.querySelector('.empty');
   if (empty) empty.parentNode.removeChild(empty);
@@ -273,10 +283,11 @@ function createBatchSection(batchId, items) {
   section.id = batchId;
   var n = batches.length;
   var time = new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+  var titleText = (label && String(label).trim()) ? String(label).trim() : ('Batch ' + n + ' — ' + time);
   section.innerHTML =
     '<div class="batch-header">' +
       '<div>' +
-        '<div class="batch-title">Batch ' + n + ' &mdash; ' + time + '</div>' +
+        '<div class="batch-title">' + escHtml(titleText) + '</div>' +
         '<div class="batch-count" id="' + batchId + '-count">Processing ' + items.length + ' image' + (items.length > 1 ? 's' : '') + '...</div>' +
       '</div>' +
       '<div class="batch-actions">' +
@@ -396,12 +407,18 @@ async function startProcessing() {
   running = true;
   updateBtn();
 
+  var labelEl = document.getElementById('batch-label');
+  var batchLabel = labelEl ? labelEl.value.trim() : '';
+
   var batchId;
   try {
     var res = await fetch('/api/batch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: items.map(function(i) { return { name: i.name }; }) })
+      body: JSON.stringify({
+        items: items.map(function(i) { return { name: i.name }; }),
+        label: batchLabel || null,
+      })
     });
     var raw = await res.text();
     var data;
@@ -418,10 +435,11 @@ async function startProcessing() {
     return;
   }
 
-  var batch = { id: batchId, items: items, timestamp: new Date() };
+  var batch = { id: batchId, label: batchLabel || null, items: items, timestamp: new Date() };
   batches.push(batch);
   items.forEach(function(i) { i.batchId = batchId; });
-  createBatchSection(batchId, items);
+  createBatchSection(batchId, items, batchLabel);
+  if (labelEl) labelEl.value = '';
 
   for (var i = 0; i < items.length; i++) {
     await processOneItem(items[i], batchId);
@@ -803,10 +821,11 @@ function renderRecentBatches(items) {
     var thumb = b.thumbnail
       ? '<img class="rb-thumb" src="' + b.thumbnail + '" alt="" loading="lazy">'
       : '<div class="rb-thumb"></div>';
+    var primary = b.label ? escHtml(b.label) : escHtml(b.id);
     return '<a class="rb-item" href="/batch/' + b.id + '" target="_blank">' +
       thumb +
       '<div class="rb-info">' +
-        '<div class="rb-id">' + b.id + '</div>' +
+        '<div class="rb-id">' + primary + '</div>' +
         '<div class="rb-meta">' + when + ' &middot; ' + b.done + '/' + b.total + '</div>' +
       '</div>' +
     '</a>';

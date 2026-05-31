@@ -12,8 +12,10 @@ export async function onRequestPost({ request, env }) {
   }
 
   const id = 'batch-' + crypto.randomUUID().slice(0, 8);
+  const rawLabel = typeof body.label === 'string' ? body.label.trim() : '';
   const manifest = {
     id,
+    label: rawLabel ? rawLabel.slice(0, 200) : null,
     createdAt: new Date().toISOString(),
     items: items.map((it) => ({ name: String(it.name), status: 'wait' })),
     notified: false,
