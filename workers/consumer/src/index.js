@@ -65,6 +65,10 @@ async function processJob(job, env) {
     ],
     generationConfig: {
       imageConfig: { imageSize: '4K' },
+      // temperature: 0 cuts creative drift — helps with Nano Banana Pro's
+      // tendency to warm-shift the white balance even when the prompt
+      // explicitly says not to. Revisit if Gemini errors on this field.
+      temperature: 0,
     },
   };
 
