@@ -27,7 +27,16 @@ export default {
             error: 'Consumer attempt ' + (message.attempts || 1) + ': ' + (e.message || String(e)),
           });
         } catch {}
-        message.retry();
+        // Back off harder for transient overload-style errors so we don't
+        // hammer Gemini while it's already saying "high demand".
+        const msg = String(e.message || '').toLowerCase();
+        const isOverload =
+          msg.includes('high demand') ||
+          msg.includes('overloaded') ||
+          msg.includes('try again later') ||
+          msg.includes('retryable gemini error');
+        if (isOverload) message.retry({ delay: 90 });
+        else message.retry();
       }
     }
   },
@@ -93,9 +102,13 @@ async function processJob(job, env) {
   }
 
   if (data.error) {
-    // Structured error (bad request, content policy, etc.). These will
-    // not succeed on retry, so mark terminal err and ack (do not retry)
-    // by returning normally.
+    // Transient errors (overload, 5xx, rate-limit) — throw so the queue
+    // retries with backoff. Terminal errors (bad prompt, content policy,
+    // invalid arg) — mark err and ack so we don't hammer Gemini for
+    // nothing.
+    if (isRetryableGeminiError(data.error)) {
+      throw new Error('Retryable Gemini error: ' + (data.error.message || JSON.stringify(data.error)));
+    }
     await updateItem(env, batchId, name, {
       status: 'err',
       error: data.error.message,
@@ -150,6 +163,32 @@ function bytesToBase64(bytes) {
     binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
   }
   return btoa(binary);
+}
+
+// Classify a structured Gemini error object as retryable (transient
+// server-side issue) vs terminal (caller's fault: bad prompt, content
+// policy block, invalid arg). Retryable errors get re-queued with
+// backoff; terminal errors mark the item 'err' and stop.
+function isRetryableGeminiError(err) {
+  if (!err) return false;
+  const code = err.code;
+  const status = String(err.status || '').toUpperCase();
+  const msg = String(err.message || '').toLowerCase();
+  if (typeof code === 'number' && (code === 429 || (code >= 500 && code < 600))) return true;
+  if (
+    status === 'UNAVAILABLE' ||
+    status === 'RESOURCE_EXHAUSTED' ||
+    status === 'INTERNAL' ||
+    status === 'DEADLINE_EXCEEDED' ||
+    status === 'ABORTED'
+  ) return true;
+  if (
+    msg.includes('high demand') ||
+    msg.includes('overloaded') ||
+    msg.includes('try again later') ||
+    msg.includes('temporarily unavailable')
+  ) return true;
+  return false;
 }
 
 async function sendTelegramIfComplete(env, batchId, origin) {
