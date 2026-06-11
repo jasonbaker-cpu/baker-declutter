@@ -61,68 +61,42 @@ async function processJob(job, env) {
   if (!inputObj) throw new Error('Input not found in R2: ' + inputKey);
   const imageBytes = await inputObj.arrayBuffer();
 
-  const imageBase64 = bytesToBase64(new Uint8Array(imageBytes));
+  // Try Gemini first. If it returns a transient/overload error or any
+  // HTTP-level failure, fall through to OpenAI for this image so the
+  // batch can keep moving while Google is having a bad day. Terminal
+  // Gemini errors (content policy, invalid arg) skip the fallback —
+  // OpenAI would refuse for the same reason and we'd just waste money.
+  let resultBytes = null;
+  let usedProvider = 'gemini';
+  let geminiTerminal = null;
 
-  const geminiBody = {
-    contents: [
-      {
-        parts: [
-          { text: String(prompt).slice(0, 32000) },
-          { inline_data: { mime_type: 'image/png', data: imageBase64 } },
-        ],
-      },
-    ],
-    generationConfig: {
-      imageConfig: { imageSize: '4K' },
-      // temperature: 0 cuts creative drift — helps with Nano Banana Pro's
-      // tendency to warm-shift the white balance even when the prompt
-      // explicitly says not to. Revisit if Gemini errors on this field.
-      temperature: 0,
-    },
-  };
-
-  const geminiRes = await fetch(
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
-    {
-      method: 'POST',
-      headers: {
-        'x-goog-api-key': env.GEMINI_API_KEY,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(geminiBody),
-    }
-  );
-
-  const text = await geminiRes.text();
-  let data;
   try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error('Invalid Gemini response (HTTP ' + geminiRes.status + '): ' + text.slice(0, 300));
+    resultBytes = await callGemini(imageBytes, prompt, env);
+  } catch (e) {
+    if (e && e.terminal) {
+      geminiTerminal = e;
+    }
+    // else: retryable / transport-level → fall through to OpenAI
   }
 
-  if (data.error) {
-    // Transient errors (overload, 5xx, rate-limit) — throw so the queue
-    // retries with backoff. Terminal errors (bad prompt, content policy,
-    // invalid arg) — mark err and ack so we don't hammer Gemini for
-    // nothing.
-    if (isRetryableGeminiError(data.error)) {
-      throw new Error('Retryable Gemini error: ' + (data.error.message || JSON.stringify(data.error)));
-    }
+  if (!resultBytes && geminiTerminal) {
     await updateItem(env, batchId, name, {
       status: 'err',
-      error: data.error.message,
+      error: geminiTerminal.message,
     });
     await sendTelegramIfComplete(env, batchId, origin);
     return;
   }
 
-  const parts = data?.candidates?.[0]?.content?.parts || [];
-  const imagePart = parts.find((p) => p?.inlineData?.data);
-  const b64 = imagePart?.inlineData?.data;
-  if (!b64) throw new Error('No image in Gemini response');
-
-  const resultBytes = base64ToBytes(b64);
+  if (!resultBytes) {
+    if (!env.OPENAI_KEY) {
+      // No fallback configured; surface the Gemini failure so the queue
+      // can retry per its normal policy.
+      throw new Error('Gemini failed and no OPENAI_KEY fallback is configured');
+    }
+    usedProvider = 'openai';
+    resultBytes = await callOpenAI(imageBytes, prompt, env); // throws on failure
+  }
 
   await env.R2_BUCKET.put(resultKey, resultBytes, {
     httpMetadata: { contentType: 'image/png' },
@@ -134,10 +108,98 @@ async function processJob(job, env) {
     originalFilename,
     resultKey,
     filename,
+    provider: usedProvider,
     error: null,
   });
 
   await sendTelegramIfComplete(env, batchId, origin);
+}
+
+// Calls Gemini's gemini-3-pro-image-preview. Returns Uint8Array of the
+// PNG bytes. Throws on any failure; if the failure is terminal (content
+// policy block, bad arg, etc.) the thrown error has `.terminal = true`
+// so processJob can skip the OpenAI fallback.
+async function callGemini(imageBytes, prompt, env) {
+  if (!env.GEMINI_API_KEY) {
+    const e = new Error('GEMINI_API_KEY not set');
+    throw e;
+  }
+  const imageBase64 = bytesToBase64(new Uint8Array(imageBytes));
+  const body = {
+    contents: [
+      {
+        parts: [
+          { text: String(prompt).slice(0, 32000) },
+          { inline_data: { mime_type: 'image/png', data: imageBase64 } },
+        ],
+      },
+    ],
+    generationConfig: {
+      imageConfig: { imageSize: '4K' },
+      temperature: 0,
+    },
+  };
+  const res = await fetch(
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
+    {
+      method: 'POST',
+      headers: {
+        'x-goog-api-key': env.GEMINI_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    }
+  );
+  const text = await res.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error('Invalid Gemini response (HTTP ' + res.status + '): ' + text.slice(0, 300));
+  }
+  if (data.error) {
+    if (isRetryableGeminiError(data.error)) {
+      throw new Error('Retryable Gemini error: ' + (data.error.message || JSON.stringify(data.error)));
+    }
+    const err = new Error(data.error.message || 'Gemini terminal error');
+    err.terminal = true;
+    throw err;
+  }
+  const parts = data?.candidates?.[0]?.content?.parts || [];
+  const imagePart = parts.find((p) => p?.inlineData?.data);
+  const b64 = imagePart?.inlineData?.data;
+  if (!b64) throw new Error('No image in Gemini response');
+  return base64ToBytes(b64);
+}
+
+// OpenAI fallback. Uses the same prompt and image bytes; expects the
+// OPENAI_KEY secret to still be set on this Worker. Throws on failure.
+async function callOpenAI(imageBytes, prompt, env) {
+  const form = new FormData();
+  form.append('model', 'gpt-image-2');
+  form.append('image[]', new Blob([imageBytes], { type: 'image/png' }), 'image.png');
+  form.append('prompt', String(prompt).slice(0, 32000));
+  form.append('n', '1');
+  form.append('size', '1920x1280');
+  form.append('quality', 'high');
+  const res = await fetch('https://api.openai.com/v1/images/edits', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.OPENAI_KEY}` },
+    body: form,
+  });
+  const text = await res.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error('Invalid OpenAI response (HTTP ' + res.status + '): ' + text.slice(0, 300));
+  }
+  if (data.error) {
+    throw new Error('OpenAI error: ' + (data.error.message || JSON.stringify(data.error)));
+  }
+  const b64 = data?.data?.[0]?.b64_json;
+  if (!b64) throw new Error('No image in OpenAI response');
+  return base64ToBytes(b64);
 }
 
 async function updateItem(env, batchId, name, updates) {
