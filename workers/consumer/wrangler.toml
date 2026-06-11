@@ -10,14 +10,17 @@ mode = "smart"
 
 # Pull jobs off the `declutter-jobs` queue.
 # max_batch_size = 1 — process exactly one message per Worker invocation
-#   so each OpenAI call has its own fresh runtime budget. (Default of 10
-#   would force 10 OpenAI calls into one invocation = guaranteed timeout.)
-# max_retries = 3 — retry a failed message up to 3 times before giving up.
+#   so each Gemini call has its own fresh runtime budget. (Default of 10
+#   would force 10 calls into one invocation = guaranteed timeout.)
+# max_retries = 5 — retry a failed message up to 5 times before giving up.
+#   Paired with the 90s backoff on overload errors in index.js, this gives
+#   each image up to ~8 minutes of patience through a Gemini brownout
+#   before we mark it terminal err.
 # max_batch_timeout = 5 — wait at most 5s to fill a batch before invoking.
 [[queues.consumers]]
 queue = "declutter-jobs"
 max_batch_size = 1
-max_retries = 3
+max_retries = 5
 max_batch_timeout = 5
 
 # Same R2 bucket the Pages Function writes originals to.
